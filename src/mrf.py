@@ -10,14 +10,14 @@ from sklearn import mixture
 def difference(x, y):
     return np.abs(x-y)  
 
-def init_energy(labels, pixels, beta, cls_info, neighbor_indices):
-    w = labels 
+def init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices):
+    w = labels_mtx 
     energy = 0.
     rows, cols = w.shape 
     for i in rows:
         for j in cols:
-            mean = cls_info[w[i,j]][0]
-            var = cls_info[w[i,j]][1]
+            mean = cls_para[w[i,j]][0]
+            var = cls_para[w[i,j]][1]
             energy += np.log(np.sqrt(2*np.pi*var))
             energy += (pixels[i,j] - mean)**2/(2*var)
             for a, b in neighbor_indices:
@@ -27,18 +27,18 @@ def init_energy(labels, pixels, beta, cls_info, neighbor_indices):
                     energy += beta*difference(w[i,j], w[a,b])
     return energy  
 
-def delta_energy(labels,pixels, index,new_label, beta, cls_info, neighbor_indices):
-    w = labels
+def delta_energy(labels_mtx,pixels, index,new_label, beta, cls_para, neighbor_indices):
+    w = labels_mtx
     (i, j) = index 
     rows, cols = w.shape
-    mean, var = cls_info[w[i,j]]
+    mean, var = cls_para[w[i,j]]
     init_energy = np.log(np.sqrt(2*np.pi*var)) + (pixels[i,j] - mean) ** 2/(2*var)
     for a, b in neighbor_indices:
         a += i
         b += j
         if 0 <=a < rows and 0 <= b < cols:
             init_energy += beta*difference(w[i,j], w[a,b])      
-    mean_new , var_new = cls_info[new_label]
+    mean_new , var_new = cls_para[new_label]
     new_energy =  np.log(np.sqrt(2*np.pi*var_new)) + (pixels[i,j] - mean_new) ** 2/(2*var_new)
     for a, b in neighbor_indices:
         a += i
@@ -48,21 +48,21 @@ def delta_energy(labels,pixels, index,new_label, beta, cls_info, neighbor_indice
 
     return new_energy - init_energy
 
-def label_update (init_w, labels, temp_function,
-              pixels, beta, cls_info, neighbor_indices, max_iteration=10000,
+def annealing(labels_mtx, cls, temp_function,
+              pixels, beta, cls_para, neighbor_indices, max_iteration=10000,
               initial_temp = 1000):
-    w = np.array(init_w)
+    w = np.array(labels_mtx)
     rows, cols = w.shape
-    current_energy = init_energy(w, pixels, beta, cls_info ,neighbor_indices)
+    current_energy = init_energy(w, pixels, beta, cls_para ,neighbor_indices)
     current_tmp = initial_temp
     iter = 0
     while(iter<max_iteration):
         i = random.randint(0,rows-1)
         j = random.randint(0,cols-1)
-        label_list = list(labels)
-        r = random.randint(0,len(label_list) - 1)
-        new_value = label_list[r]
-        delta = delta_energy(labels, pixels, (i,j), new_value, beta, cls_info, neighbor_indices)
+        cls_list = list(cls)
+        r = random.randint(0,len(cls_list) - 1)
+        new_value = cls_list[r]
+        delta = delta_energy(cls, pixels, (i,j), new_value, beta, cls_para, neighbor_indices)
 
         r = random.uniform(0,1)
         
@@ -81,10 +81,28 @@ def label_update (init_w, labels, temp_function,
             if r < k :
                 w [i, j] = new_value
                 current_energy += delta 
-            
+        if (temp_function):
+            current_tmp = temp_function(current_tmp) 
         iter +=1
         
         return w
         
-
-    
+def mrf_process(adata, gene_id,beta, n_components = 2, temp_function = lambda x: 0.99*x,
+        max_iteration=10000, neighbor_indice =[(-1,1),(1,1),(1,-1),(1,1)]):
+    """
+    Marfov random field complete part
+    """
+    coord = adata.obs[['array_row','array_col']].values
+    exp = adata[:,gene_id].X.toarray()
+    rows, cols = np.max(coord, axis=0) 
+    pixels = np.zeros((rows, cols))
+    labels_mtx = np.zeros((rows, cols))
+    gmm = mixture.GaussianMixture(n_components=n_components)
+    gmm.fit(exp)
+    labels = gmm.predict(exp)
+    for i,(x,y) in enumerate(coord):
+        pixels[x-1,y-1] = exp[i]
+        labels_mtx[x-1,y-1] = labels[i]
+    cls_para = gmm.mean_.reshape(-1), gmm.covariances_.reshape(-1)
+    labels_mtx = annealing(labels_mtx, labels, temp_function, pixels, beta, cls_para, neighbor_indice, max_iteration) 
+    return labels_mtx
