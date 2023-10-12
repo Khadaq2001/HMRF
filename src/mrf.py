@@ -14,10 +14,9 @@ def init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices):
     w = labels_mtx 
     energy = 0.
     rows, cols = w.shape 
-    for i in rows:
-        for j in cols:
-            mean = cls_para[w[i,j]][0]
-            var = cls_para[w[i,j]][1]
+    for i in range(rows):
+        for j in range(cols):
+            mean, var= cls_para[w[i,j]]
             energy += np.log(np.sqrt(2*np.pi*var))
             energy += (pixels[i,j] - mean)**2/(2*var)
             for a, b in neighbor_indices:
@@ -45,16 +44,17 @@ def delta_energy(labels_mtx,pixels, index,new_label, beta, cls_para, neighbor_in
         b += j
         if 0 <=a < rows and 0 <= b < cols:
             new_energy += beta*difference(new_label, w[a,b])
-
+    # print (new_energy, init_energy)
     return new_energy - init_energy
 
 def annealing(labels_mtx, cls, temp_function,
               pixels, beta, cls_para, neighbor_indices, max_iteration=10000,
               initial_temp = 1000):
-    w = np.array(labels_mtx)
-    rows, cols = w.shape
+    w =  labels_mtx
+    (rows, cols) = w.shape
     current_energy = init_energy(w, pixels, beta, cls_para ,neighbor_indices)
     current_tmp = initial_temp
+    changed = 0
     iter = 0
     while(iter<max_iteration):
         i = random.randint(0,rows-1)
@@ -62,13 +62,14 @@ def annealing(labels_mtx, cls, temp_function,
         cls_list = list(cls)
         r = random.randint(0,len(cls_list) - 1)
         new_value = cls_list[r]
-        delta = delta_energy(cls, pixels, (i,j), new_value, beta, cls_para, neighbor_indices)
+        delta = delta_energy(w, pixels, (i,j), new_value, beta, cls_para, neighbor_indices)
 
         r = random.uniform(0,1)
         
         if(delta < 0):
             w[i, j] = new_value
             current_energy += delta
+            changed +=1
         else:
             try:
                 if (-delta / current_tmp<-600):
@@ -84,9 +85,10 @@ def annealing(labels_mtx, cls, temp_function,
         if (temp_function):
             current_tmp = temp_function(current_tmp) 
         iter +=1
+    print(f"{changed} pixels changed after {iter} iterations")  
+    return w
         
-        return w
-        
+
 def mrf_process(adata, gene_id,beta, n_components = 2, temp_function = lambda x: 0.99*x,
         max_iteration=10000, neighbor_indice =[(-1,1),(1,1),(1,-1),(1,1)]):
     """
@@ -96,13 +98,17 @@ def mrf_process(adata, gene_id,beta, n_components = 2, temp_function = lambda x:
     exp = adata[:,gene_id].X.toarray()
     rows, cols = np.max(coord, axis=0) 
     pixels = np.zeros((rows, cols))
-    labels_mtx = np.zeros((rows, cols))
+    labels_mtx = np.zeros((rows, cols), dtype=int)
+    label_list = np.zeros(len(coord)) 
     gmm = mixture.GaussianMixture(n_components=n_components)
     gmm.fit(exp)
     labels = gmm.predict(exp)
     for i,(x,y) in enumerate(coord):
         pixels[x-1,y-1] = exp[i]
         labels_mtx[x-1,y-1] = labels[i]
-    cls_para = gmm.mean_.reshape(-1), gmm.covariances_.reshape(-1)
+    cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
+    cls_para = np.array(cls_para).T
     labels_mtx = annealing(labels_mtx, labels, temp_function, pixels, beta, cls_para, neighbor_indice, max_iteration) 
-    return labels_mtx
+    for i, (x,y) in enumerate(coord):
+       label_list[i] = labels_mtx[x-1,y-1] 
+    return label_list
