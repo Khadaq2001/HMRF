@@ -5,6 +5,7 @@ import parmap #type: ignore
 import multiprocessing as mp
 import random
 from sklearn import mixture 
+from tqdm import tqdm
 
 
 def difference(x, y):
@@ -56,7 +57,7 @@ def annealing(labels_mtx, cls, temp_function,
     current_tmp = initial_temp
     changed = 0
     iter = 0
-    while(iter<max_iteration):
+    for i in tqdm(range(int(max_iteration))):
         i = random.randint(0,rows-1)
         j = random.randint(0,cols-1)
         cls_list = list(cls)
@@ -70,6 +71,9 @@ def annealing(labels_mtx, cls, temp_function,
             w[i, j] = new_value
             current_energy += delta
             changed +=1
+
+            # add distribution update function 
+
         else:
             try:
                 if (-delta / current_tmp<-600):
@@ -82,6 +86,7 @@ def annealing(labels_mtx, cls, temp_function,
             if r < k :
                 w [i, j] = new_value
                 current_energy += delta 
+                changed += 1 
         if (temp_function):
             current_tmp = temp_function(current_tmp) 
         iter +=1
