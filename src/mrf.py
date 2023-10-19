@@ -67,6 +67,8 @@ def distribution_update(new_label, cluster, cls_para):
     var = np.var(cluster)
     cls_para[new_label] = (mean, var)
 
+def EM_update(cluster, cls_para, max_iter):
+    
 
 def annealing(
     labels_mtx,
