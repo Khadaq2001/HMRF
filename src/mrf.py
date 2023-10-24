@@ -61,20 +61,26 @@ def delta_energy(
     # print (new_energy, init_energy)
     return new_energy - init_energy
 
-def temp_function(method = "exponential"):
-    if method =='exponential':
+
+def temp_function(method="exponential"):
+    if method == "exponential":
         return lambda x: 0.99 * x
-    
+
 
 def distribution_update(new_label, cluster, cls_para):
     mean = np.mean(cluster)
     var = np.var(cluster)
+    if var == 0:
+        var = 1e-5
     cls_para[new_label] = (mean, var)
 
 
-def EM_update(cluster, cls_para, max_iter):
-    
-    return 
+def EM_update(exp, cls_para, max_iter):
+    mean1, var1 = cls_para[0]
+    mean2, var2 = cls_para[1]
+
+    return False  ##
+
 
 def annealing(
     labels_mtx,
@@ -188,5 +194,3 @@ def mrf_process(
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
     return labels_list
-
-
