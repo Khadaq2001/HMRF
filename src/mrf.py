@@ -75,10 +75,9 @@ def distribution_update(new_label, cluster, cls_para):
     cls_para[new_label] = (mean, var)
 
 
-def EM_update(exp, cls_para, max_iter):
+def EM_update(pixel, index, cls_para, max_iter):
     mean1, var1 = cls_para[0]
     mean2, var2 = cls_para[1]
-
     return False  ##
 
 
