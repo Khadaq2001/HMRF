@@ -6,6 +6,7 @@ import multiprocessing as mp
 import random
 from sklearn import mixture
 from tqdm import tqdm
+from zmq import NULL
 
 
 def difference(x, y):
@@ -32,16 +33,12 @@ def init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue)
     return energy
 
 
-def delta_energy(
-    labels_mtx, pixels, index, new_label, beta, cls_para, neighbor_indices, in_tissue
-):
+def delta_energy(labels_mtx, pixels, index, new_label, beta, cls_para, neighbor_indices, in_tissue):
     labels_mtx
     (i, j) = index
     rows, cols = labels_mtx.shape
     mean, var = cls_para[labels_mtx[i, j]]
-    init_energy = np.log(np.sqrt(2 * np.pi * var)) + (pixels[i, j] - mean) ** 2 / (
-        2 * var
-    )
+    init_energy = np.log(np.sqrt(2 * np.pi * var)) + (pixels[i, j] - mean) ** 2 / (2 * var)
     for a, b in neighbor_indices:
         a += i
         b += j
@@ -49,9 +46,7 @@ def delta_energy(
             if in_tissue[a, b]:
                 init_energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
     mean_new, var_new = cls_para[new_label]
-    new_energy = np.log(np.sqrt(2 * np.pi * var_new)) + (
-        pixels[i, j] - mean_new
-    ) ** 2 / (2 * var_new)
+    new_energy = np.log(np.sqrt(2 * np.pi * var_new)) + (pixels[i, j] - mean_new) ** 2 / (2 * var_new)
     for a, b in neighbor_indices:
         a += i
         b += j
@@ -75,12 +70,6 @@ def distribution_update(new_label, cluster, cls_para):
     cls_para[new_label] = (mean, var)
 
 
-def EM_update(pixel, index, cls_para, max_iter):
-    mean1, var1 = cls_para[0]
-    mean2, var2 = cls_para[1]
-    return False  ##
-
-
 def annealing(
     labels_mtx,
     cls,
@@ -94,9 +83,7 @@ def annealing(
     initial_temp=1000,
 ):
     (rows, cols) = labels_mtx.shape
-    current_energy = init_energy(
-        labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue
-    )
+    current_energy = init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue)
     current_tmp = initial_temp
     total_change = 0
     iter = 0
@@ -148,6 +135,33 @@ def annealing(
         iter += 1
     print(f"{total_change} pixels changed after {iter} iterations")
     return labels_mtx
+
+
+def icm_em_process(labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue, coord, max_iter):
+    current_energy = init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue)
+    iter = 0
+    delta = float("inf")
+    while (iter < max_iter) & (delta > 0.01):
+        delta = 0
+        for i, j in coord:
+            new_list = list(cls)
+            new_list.remove(labels_mtx[i, j])
+            new_label = random.choice(new_list)
+            delta += delta_energy(
+                labels_mtx,
+                pixels,
+                (i, j),
+                new_label,
+                beta,
+                cls_para,
+                neighbor_indices,
+                in_tissue,
+            )
+            if delta < 0:
+                labels_mtx[i, j] = new_label
+                current_energy += delta
+            iter += 1
+    return NULL
 
 
 def mrf_process(
