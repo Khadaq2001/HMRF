@@ -6,7 +6,6 @@ import multiprocessing as mp
 import random
 from sklearn import mixture
 from tqdm import tqdm
-from zmq import NULL
 
 
 def difference(x, y):
@@ -42,15 +41,17 @@ def delta_energy(labels_mtx, pixels, index, new_label, beta, cls_para, neighbor_
     for a, b in neighbor_indices:
         a += i
         b += j
-        if (a < rows) & (b < cols) & in_tissue[a, b]:
-            init_energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
+        if (a < rows) & (b < cols):
+            if in_tissue[a, b]:
+                init_energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
     mean_new, var_new = cls_para[new_label]
     new_energy = np.log(np.sqrt(2 * np.pi * var_new)) + (pixels[i, j] - mean_new) ** 2 / (2 * var_new)
     for a, b in neighbor_indices:
         a += i
         b += j
-        if (a < rows) & (b < cols) & in_tissue[a, b]:
-            new_energy += beta * difference(new_label, labels_mtx[a, b])
+        if (a < rows) & (b < cols):
+            if in_tissue[a, b]:
+                new_energy += beta * difference(new_label, labels_mtx[a, b])
     # print (new_energy, init_energy)
     return new_energy - init_energy
 
@@ -135,9 +136,9 @@ def annealing(
     return labels_mtx
 
 
-def icm_em_process(labels_mtx, pixels, beta, cls, cls_para, neighbor_indices, in_tissue, coord, icm_iter, max_iter):
-    for _ in max_iter:
-        delta = float("-inf")   
+def icm_em_process(labels_mtx, pixels, beta, cls, cls_para, neighbor_indices, in_tissue, coord, icm_iter=10, max_iter=100):
+    for _ in tqdm(range(max_iter)):
+        delta = float("-inf")
         # ICM step
         iter = 0
         while (iter < icm_iter) & (delta < -0.01):
@@ -208,16 +209,17 @@ def mrf_process(
         in_tissue[x, y] = True
     cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
     cls_para = np.array(cls_para).T
-    labels_mtx = annealing(
+    labels_mtx, cls_para = icm_em_process(
         labels_mtx,
-        cls,
-        cls_para,
         pixels,
         beta,
-        temp_function,
+        cls,
+        cls_para,
         neighbor_indice,
         in_tissue,
-        max_iteration,
+        coord,
+        icm_iter=10,
+        max_iter=10,
     )
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
