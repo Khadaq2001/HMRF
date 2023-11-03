@@ -68,13 +68,13 @@ def distribution_update(new_label, cluster, cls_para):
 
 def annealing(
     labels_mtx: np.ndarray,
-    cls,
-    cls_para,
-    pixels,
-    beta,
-    temp_function,
-    neighbor_indices,
-    in_tissue,
+    cls: set,
+    cls_para: np.ndarray,
+    pixels: np.ndarray,
+    beta: int,
+    temp_function: callable,
+    in_tissue: np.ndarray,
+    neighbor_indices: list = [(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
     max_iteration=10000,
     initial_temp=1000,
 ):
@@ -100,7 +100,6 @@ def annealing(
             neighbor_indices,
             in_tissue,
         )
-
         r = random.uniform(0, 1)
 
         if delta < 0:
@@ -142,7 +141,6 @@ def icm_em_process(
     neighbor_indices,
     in_tissue,
     coord,
-    exp,
     icm_iter=10,
     max_iter=100,
 ):
@@ -168,11 +166,14 @@ def icm_em_process(
                     neighbor_indices,
                     in_tissue,
                 )
-                print(temp_delta)
+                # print(temp_delta)
                 if temp_delta < 0:
                     labels_mtx[i, j] = new_label
                     delta += temp_delta
+                    changed += 1
             iter += 1
+            break
+        print(changed)
     return labels_mtx, cls_para
 
 
@@ -197,19 +198,45 @@ def icm_em_process(
 
 
 def mrf_process(
-    adata,
-    gene_id,
-    beta,
-    n_components=2,
-    icm_iter=10,
-    max_iter=10,
+    adata: sc.AnnData,
+    gene_id: str,
+    beta: int,
+    n_components: int = 2,
+    max_iteration: int = 10000,
     temp_function=lambda x: 0.99 * x,
-    max_iteration=10000,
     neighbor_indice=[(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
 ):
-    """
-    Marfov random field complete part
-    """
+    coord = adata.obs[["array_row", "array_col"]].values
+    exp = adata[:, gene_id].X.toarray()
+    rows, cols = np.max(coord, axis=0)
+    pixels = np.zeros((rows + 1, cols + 1))
+    labels_mtx = np.zeros((rows + 1, cols + 1), dtype=int)
+    in_tissue = np.zeros((rows + 1, cols + 1), dtype=bool)
+    labels_list = np.zeros(len(coord))
+    gmm = mixture.GaussianMixture(n_components=n_components)
+    gmm.fit(exp)
+    pred = gmm.predict(exp)
+    cls = set(pred)
+    for i, (x, y) in enumerate(coord):
+        pixels[x, y] = exp[i]
+        labels_mtx[x, y] = pred[i]
+        in_tissue[x, y] = True
+    cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
+    cls_para = np.array(cls_para).T
+    labels_mtx = annealing(labels_mtx, cls, cls_para, pixels, beta, temp_function, neighbor_indice, in_tissue, max_iteration=max_iteration)
+    print(cls_para)
+    for i, (x, y) in enumerate(coord):
+        labels_list[i] = labels_mtx[x, y]
+    return labels_list
+
+
+def mrf_with_icmem(
+    adata: sc.AnnData,
+    gene_id: str,
+    beta: int,
+    n_components: int = 2,
+    neighbor_indice=[(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
+):
     coord = adata.obs[["array_row", "array_col"]].values
     exp = adata[:, gene_id].X.toarray()
     rows, cols = np.max(coord, axis=0)
@@ -236,10 +263,11 @@ def mrf_process(
         neighbor_indice,
         in_tissue,
         coord,
-        exp=exp,
-        icm_iter=icm_iter,
-        max_iter=max_iter,
+        exp,
+        icm_iter=10,
+        max_iter=100,
     )
+    print(cls_para)
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
     return labels_list
