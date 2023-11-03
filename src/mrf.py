@@ -26,9 +26,8 @@ def init_energy(labels_mtx, pixels, beta, cls_para, neighbor_indices, in_tissue)
                 a += i
                 b += j
                 # print(a, b)
-                if (a < rows) & (b < cols):
-                    if in_tissue[a, b]:
-                        energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
+                if (a < rows) and (b < cols) and in_tissue[a, b]:
+                    energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
     return energy
 
 
@@ -41,17 +40,15 @@ def delta_energy(labels_mtx, pixels, index, new_label, beta, cls_para, neighbor_
     for a, b in neighbor_indices:
         a += i
         b += j
-        if (a < rows) & (b < cols):
-            if in_tissue[a, b]:
-                init_energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
+        if (a < rows) and (b < cols) and in_tissue[a, b]:
+            init_energy += beta * difference(labels_mtx[i, j], labels_mtx[a, b])
     mean_new, var_new = cls_para[new_label]
     new_energy = np.log(np.sqrt(2 * np.pi * var_new)) + (pixels[i, j] - mean_new) ** 2 / (2 * var_new)
     for a, b in neighbor_indices:
         a += i
         b += j
-        if (a < rows) & (b < cols):
-            if in_tissue[a, b]:
-                new_energy += beta * difference(new_label, labels_mtx[a, b])
+        if (a < rows) and (b < cols) and in_tissue[a, b]:
+            new_energy += beta * difference(new_label, labels_mtx[a, b])
     # print (new_energy, init_energy)
     return new_energy - init_energy
 
@@ -70,7 +67,7 @@ def distribution_update(new_label, cluster, cls_para):
 
 
 def annealing(
-    labels_mtx,
+    labels_mtx: np.ndarray,
     cls,
     cls_para,
     pixels,
@@ -136,13 +133,26 @@ def annealing(
     return labels_mtx
 
 
-def icm_em_process(labels_mtx, pixels, beta, cls, cls_para, neighbor_indices, in_tissue, coord, icm_iter=10, max_iter=100):
+def icm_em_process(
+    labels_mtx,
+    pixels,
+    beta,
+    cls,
+    cls_para,
+    neighbor_indices,
+    in_tissue,
+    coord,
+    exp,
+    icm_iter=10,
+    max_iter=100,
+):
     for _ in tqdm(range(max_iter)):
         delta = float("-inf")
         # ICM step
         iter = 0
-        while (iter < icm_iter) & (delta < -0.01):
+        while (iter < icm_iter) and (delta < -0.01):
             delta = 0
+            changed = 0
             np.random.shuffle(coord)
             for i, j in coord:
                 new_list = list(cls)
@@ -158,10 +168,15 @@ def icm_em_process(labels_mtx, pixels, beta, cls, cls_para, neighbor_indices, in
                     neighbor_indices,
                     in_tissue,
                 )
+                print(temp_delta)
                 if temp_delta < 0:
                     labels_mtx[i, j] = new_label
                     delta += temp_delta
             iter += 1
+    return labels_mtx, cls_para
+
+
+"""
         # E Step
         cluster_prob = np.zeros((len(coord), len(cls)))
         for i in range(len(coord)):
@@ -169,15 +184,16 @@ def icm_em_process(labels_mtx, pixels, beta, cls, cls_para, neighbor_indices, in
             for k in range(len(cls)):
                 mean, var = cls_para[k]
                 cluster_prob[i, k] = (1 / np.sqrt(2 * np.pi * var)) * np.exp(-((pixels[x, y] - mean) ** 2) / (2 * var))
-                cluster_prob /= np.sum(cluster_prob, axis=1).reshape(-1, 1)
+        cluster_prob /= np.sum(cluster_prob, axis=1).reshape(-1, 1)
+        # print(cluster_prob.shape, exp.shape)
 
         # M Step
         for k in range(len(cls)):
-            mean = np.sum(cluster_prob[:, k].reshape(-1, 1) * pixels[labels_mtx == k]) / np.sum(cluster_prob[:, k])
-            var = np.sum(cluster_prob[:, k].reshape(-1, 1) * (pixels[labels_mtx == k] - mean) ** 2) / np.sum(cluster_prob[:, k])
+            mean = np.sum(cluster_prob[:, k].reshape(-1, 1) * exp) / np.sum(cluster_prob[:, k])
+            var = np.sum(cluster_prob[:, k].reshape(-1, 1) * (exp - mean) ** 2) / np.sum(cluster_prob[:, k])
             cls_para[k] = (mean, var)
-
-    return labels_mtx, cls_para
+            print(f"mean: {mean} , var : {var}")
+"""
 
 
 def mrf_process(
@@ -185,6 +201,8 @@ def mrf_process(
     gene_id,
     beta,
     n_components=2,
+    icm_iter=10,
+    max_iter=10,
     temp_function=lambda x: 0.99 * x,
     max_iteration=10000,
     neighbor_indice=[(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
@@ -218,8 +236,9 @@ def mrf_process(
         neighbor_indice,
         in_tissue,
         coord,
-        icm_iter=10,
-        max_iter=10,
+        exp=exp,
+        icm_iter=icm_iter,
+        max_iter=max_iter,
     )
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
