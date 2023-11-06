@@ -74,7 +74,7 @@ def annealing(
     beta: int,
     temp_function: callable,
     in_tissue: np.ndarray,
-    neighbor_indices: list = [(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
+    neighbor_indices: list,
     max_iteration=10000,
     initial_temp=1000,
 ):
@@ -124,8 +124,8 @@ def annealing(
             current_tmp = temp_function(current_tmp)
 
         if changed:
-            cluster = pixels[labels_mtx == new_label]
-            distribution_update(new_label, cluster, cls_para)
+            # cluster = pixels[labels_mtx == new_label]
+            # distribution_update(new_label, cluster, cls_para)
             total_change += 1
         iter += 1
     print(f"{total_change} pixels changed after {iter} iterations")
@@ -145,14 +145,14 @@ def icm_em_process(
     max_iter=100,
 ):
     for _ in tqdm(range(max_iter)):
-        delta = float("-inf")
         # ICM step
+        temp_coord = np.copy(coord)
         iter = 0
         while (iter < icm_iter) and (delta < -0.01):
             delta = 0
             changed = 0
-            np.random.shuffle(coord)
-            for i, j in coord:
+            np.random.shuffle(temp_coord)
+            for i, j in temp_coord:
                 new_list = list(cls)
                 new_list.remove(labels_mtx[i, j])
                 new_label = random.choice(new_list)
@@ -204,8 +204,9 @@ def mrf_process(
     n_components: int = 2,
     max_iteration: int = 10000,
     temp_function=lambda x: 0.99 * x,
-    neighbor_indice=[(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
+    neighbor_indice: list = [(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
 ):
+    print(neighbor_indice)
     coord = adata.obs[["array_row", "array_col"]].values
     exp = adata[:, gene_id].X.toarray()
     rows, cols = np.max(coord, axis=0)
@@ -223,7 +224,7 @@ def mrf_process(
         in_tissue[x, y] = True
     cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
     cls_para = np.array(cls_para).T
-    labels_mtx = annealing(labels_mtx, cls, cls_para, pixels, beta, temp_function, neighbor_indice, in_tissue, max_iteration=max_iteration)
+    labels_mtx = annealing(labels_mtx, cls, cls_para, pixels, beta, temp_function, in_tissue, neighbor_indice, max_iteration=max_iteration)
     print(cls_para)
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
