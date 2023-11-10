@@ -71,7 +71,7 @@ def annealing(
     cls: set,
     cls_para: np.ndarray,
     pixels: np.ndarray,
-    beta: int,
+    beta: float,
     temp_function: callable,
     in_tissue: np.ndarray,
     neighbor_indices: list,
@@ -124,8 +124,8 @@ def annealing(
             current_tmp = temp_function(current_tmp)
 
         if changed:
-            # cluster = pixels[labels_mtx == new_label]
-            # distribution_update(new_label, cluster, cls_para)
+            cluster = pixels[labels_mtx == new_label]
+            distribution_update(new_label, cluster, cls_para)
             total_change += 1
         iter += 1
     print(f"{total_change} pixels changed after {iter} iterations")
@@ -141,13 +141,16 @@ def icm_em_process(
     neighbor_indices,
     in_tissue,
     coord,
+    exp,
     icm_iter=10,
-    max_iter=100,
+    max_iter=10,
 ):
     for _ in tqdm(range(max_iter)):
         # ICM step
         temp_coord = np.copy(coord)
+        delta = float("-inf")
         iter = 0
+        changed = 0
         while (iter < icm_iter) and (delta < -0.01):
             delta = 0
             changed = 0
@@ -172,35 +175,29 @@ def icm_em_process(
                     delta += temp_delta
                     changed += 1
             iter += 1
-            break
-        print(changed)
-    return labels_mtx, cls_para
 
-
-"""
-        # E Step
         cluster_prob = np.zeros((len(coord), len(cls)))
+        # E Step
         for i in range(len(coord)):
             x, y = coord[i]
             for k in range(len(cls)):
                 mean, var = cls_para[k]
                 cluster_prob[i, k] = (1 / np.sqrt(2 * np.pi * var)) * np.exp(-((pixels[x, y] - mean) ** 2) / (2 * var))
         cluster_prob /= np.sum(cluster_prob, axis=1).reshape(-1, 1)
-        # print(cluster_prob.shape, exp.shape)
-
         # M Step
         for k in range(len(cls)):
             mean = np.sum(cluster_prob[:, k].reshape(-1, 1) * exp) / np.sum(cluster_prob[:, k])
             var = np.sum(cluster_prob[:, k].reshape(-1, 1) * (exp - mean) ** 2) / np.sum(cluster_prob[:, k])
+            var = 1e-5 if var == 0 else var
             cls_para[k] = (mean, var)
-            print(f"mean: {mean} , var : {var}")
-"""
+            # print(f"k: {k}, mean: {mean}, var : {var}")
+    return labels_mtx, cls_para
 
 
 def mrf_process(
     adata: sc.AnnData,
     gene_id: str,
-    beta: int,
+    beta: float,
     n_components: int = 2,
     max_iteration: int = 10000,
     temp_function=lambda x: 0.99 * x,
@@ -234,7 +231,8 @@ def mrf_process(
 def mrf_with_icmem(
     adata: sc.AnnData,
     gene_id: str,
-    beta: int,
+    beta: float,
+    max_iter: int,
     n_components: int = 2,
     neighbor_indice=[(-1, 1), (1, 1), (1, -1), (1, 1), (0, 2), (0, -2)],
 ):
@@ -255,7 +253,7 @@ def mrf_with_icmem(
         in_tissue[x, y] = True
     cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
     cls_para = np.array(cls_para).T
-    labels_mtx, cls_para = icm_em_process(
+    labels_mtx, cls_para, cluster_prob = icm_em_process(
         labels_mtx,
         pixels,
         beta,
@@ -264,11 +262,11 @@ def mrf_with_icmem(
         neighbor_indice,
         in_tissue,
         coord,
-        exp,
+        exp=exp,
         icm_iter=10,
-        max_iter=100,
+        max_iter=max_iter,
     )
     print(cls_para)
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
-    return labels_list
+    return labels_list, cluster_prob
