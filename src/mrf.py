@@ -75,7 +75,7 @@ def annealing(
     return labels_mtx
 
 
-def icm_em_process(
+def icm_em(
     labels_mtx,
     pixels,
     beta,
@@ -114,7 +114,6 @@ def icm_em_process(
                 )
                 # print(temp_delta)
                 if temp_delta < 0:
-                    
                     labels_mtx[i, j] = new_label
                     delta += temp_delta
                     changed += 1
@@ -197,7 +196,7 @@ def mrf_with_icmem(
         in_tissue[x, y] = True
     cls_para = gmm.means_.reshape(-1), gmm.covariances_.reshape(-1)
     cls_para = np.array(cls_para).T
-    labels_mtx, cls_para, cluster_prob = icm_em_process(
+    labels_mtx, cls_para = icm_em(
         labels_mtx,
         pixels,
         beta,
@@ -213,4 +212,4 @@ def mrf_with_icmem(
     print(cls_para)
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
-    return labels_list, cluster_prob
+    return labels_list

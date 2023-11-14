@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 
+def label_reverse(labels_list):
+    labels_list = 1-labels_list 
+    return labels_list
+
 
 def difference(x, y):
     return np.abs(x - y)
