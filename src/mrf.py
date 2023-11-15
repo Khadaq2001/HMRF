@@ -188,6 +188,7 @@ def mrf_with_icmem(
     labels_list = np.zeros(len(coord))
     gmm = mixture.GaussianMixture(n_components=n_components)
     gmm.fit(exp)
+    means = gmm.means_
     pred = gmm.predict(exp)
     cls = set(pred)
     for i, (x, y) in enumerate(coord):
@@ -212,4 +213,5 @@ def mrf_with_icmem(
     print(cls_para)
     for i, (x, y) in enumerate(coord):
         labels_list[i] = labels_mtx[x, y]
+    labels_list = label_resort(means, labels_list)
     return labels_list

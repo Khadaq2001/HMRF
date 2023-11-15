@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 
+
 def label_reverse(labels_list):
-    labels_list = 1-labels_list 
+    labels_list = 1 - labels_list
     return labels_list
 
 
@@ -62,3 +63,10 @@ def distribution_update(new_label, cluster, cls_para):
     if var == 0:
         var = 1e-5
     cls_para[new_label] = (mean, var)
+
+
+def label_resort(means, label_list):
+    cls_labels = np.argmax(means[:, 0])
+    new_labels = np.zeros_like(label_list)
+    new_labels[label_list == cls_labels] = 1
+    return new_labels 

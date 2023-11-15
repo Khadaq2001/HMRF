@@ -1,14 +1,18 @@
-import numpy 
-import pandas
-import scanpy
-from anndata import AnnData
+import numpy as np
+import pandas as pd
+import scanpy as sc
+
 def impute(
-    adata: AnnData,
+    cluster_exp: ndarrary,
+    threshld: float,
+
+)
+    """
+    Impute single gene expression spatial transcriptomics data from same label cells.
+    """
+    cluster_exp[cluster_exp < threshld] = np.mean(cluster_exp)
+    return cluster_exp
+
+
+def main():
     
-) -> AnnData:
-    """
-    Impute spatial transcriptomics data from same label cells.
-    """
-    ...
-
-
