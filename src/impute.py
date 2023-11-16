@@ -3,16 +3,17 @@ import pandas as pd
 import scanpy as sc
 
 def impute(
-    cluster_exp: ndarrary,
+    exp: np.ndarray,
+    label_list : np.ndarray,
     threshld: float,
-
-)
+):
     """
     Impute single gene expression spatial transcriptomics data from same label cells.
     """
-    cluster_exp[cluster_exp < threshld] = np.mean(cluster_exp)
-    return cluster_exp
-
-
+    for label in label_list:
+        idx = np.where(label_list == label)
+        cluster_exp = exp[:,idx ]
+        
 def main():
-    
+       
+    ...

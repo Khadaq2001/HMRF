@@ -6,7 +6,7 @@ import multiprocessing as mp
 import random
 from sklearn import mixture
 from tqdm import tqdm
-from function import *
+from .function import *
 
 
 def annealing(
