@@ -12,20 +12,21 @@ def impute(
     """
     Impute single gene expression spatial transcriptomics data from same label cells.
     """
-    for label in label_list:
+    for label in set(label_list):
         idx = np.where(label_list == label)
-        cluster_exp = exp[:, idx]
-        min_index = np.argmin(cluster_exp)
+        cluster_exp = exp[idx]
+        min = np.min(cluster_exp)
+        min_index = np.where(cluster_exp == min)
+        print(f"imputed spot: {len(min_index[0])}")
         cluster_exp[min_index] = np.mean(cluster_exp)
-        exp[:, idx] = cluster_exp + shift
+        exp[idx] = cluster_exp + shift
     return exp
 
 
 def main():
-    test_data = pd.read_csv("./temp/test_data.csv")
-    test_data = test_data.values
-    test_label = pd.read_csv("./test_label.csv")
-    print(test_data)
+    test_data = pd.read_csv("../temp/test_data.csv").values.reshape(-1)
+    test_label = pd.read_csv("../temp/test_labels.csv").values.reshape(-1)
+    print(test_label)
     imputed_data = impute(test_data, test_label, 0.1, 0.1)
     print(imputed_data)
 
