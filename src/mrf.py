@@ -9,6 +9,13 @@ from tqdm import tqdm
 from .function import *
 
 
+class GeneGraph:
+
+    """
+    Construct gene graph and implement HMRF in spatial transcriptomics
+    """
+
+
 def annealing(
     labels_mtx: np.ndarray,
     cls: set,

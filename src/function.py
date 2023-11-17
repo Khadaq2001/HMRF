@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from sklearn.neighbors import NearestNeighbors
+import scipy.sparse as sp
 
 
 def label_reverse(labels_list):
@@ -69,4 +71,76 @@ def label_resort(means, label_list):
     cls_labels = np.argmax(means[:, 0])
     new_labels = np.zeros_like(label_list)
     new_labels[label_list == cls_labels] = 1
-    return new_labels 
+    return new_labels
+
+
+def get_binary_weight(adata, rad_cutoff):
+    coor = adata.obs
+    coor = coor.loc[:, ["imagerow", "imagecol"]]
+    coor.index = adata.obs.index
+    coor.columns = ["imagerow", "imagecol"]
+
+    nbrs = NearestNeighbors(radius=rad_cutoff).fit(coor)
+    distances, indices = nbrs.radius_neighbors(coor, return_distance=True)
+    KNN_list = []
+    for it in range(indices.shape[0]):
+        KNN_list.append(pd.DataFrame(zip([it] * indices[it].shape[0], indices[it], distances[it])))
+    KNN_df = pd.concat(KNN_list)
+    KNN_df.columns = ["Cell1", "Cell2", "Distance"]
+    Spatial_Net = KNN_df.copy()
+    Spatial_Net = Spatial_Net.loc[Spatial_Net["Distance"] > 0,]
+    id_cell_trans = dict(
+        zip(
+            range(coor.shape[0]),
+            np.array(coor.index),
+        )
+    )
+    Spatial_Net["Cell1"] = Spatial_Net["Cell1"].map(id_cell_trans)
+    Spatial_Net["Cell2"] = Spatial_Net["Cell2"].map(id_cell_trans)
+
+    # out = pd.get_dummies(Spatial_Net.set_index("Cell1")['Cell2'],sparse=True).max(level=0)
+    G_df = Spatial_Net
+    cells = np.array(adata.obs_names)
+    cells_id_tran = dict(zip(cells, range(cells.shape[0])))
+    G_df["Cell1"] = G_df["Cell1"].map(cells_id_tran)
+    G_df["Cell2"] = G_df["Cell2"].map(cells_id_tran)
+    G = sp.coo_matrix((np.ones(G_df.shape[0]), (G_df["Cell1"], G_df["Cell2"])), shape=(adata.n_obs, adata.n_obs))
+    G = G + sp.eye(G.shape[0])
+
+    return G
+
+
+def get_binary_weight(adata, n_neighbors=6):
+    coor = adata.obs
+    coor = coor.loc[:, ["imagerow", "imagecol"]]
+    coor.index = adata.obs.index
+    coor.columns = ["imagerow", "imagecol"]
+
+    nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(coor)
+    distances, indices = nbrs.kneighbors(coor, return_distance=True)
+    KNN_list = []
+    for it in range(indices.shape[0]):
+        KNN_list.append(pd.DataFrame(zip([it] * indices[it].shape[0], indices[it], distances[it])))
+    KNN_df = pd.concat(KNN_list)
+    KNN_df.columns = ["Cell1", "Cell2", "Distance"]
+    Spatial_Net = KNN_df.copy()
+    Spatial_Net = Spatial_Net.loc[Spatial_Net["Distance"] > 0,]
+    id_cell_trans = dict(
+        zip(
+            range(coor.shape[0]),
+            np.array(coor.index),
+        )
+    )
+    Spatial_Net["Cell1"] = Spatial_Net["Cell1"].map(id_cell_trans)
+    Spatial_Net["Cell2"] = Spatial_Net["Cell2"].map(id_cell_trans)
+
+    # out = pd.get_dummies(Spatial_Net.set_index("Cell1")['Cell2'],sparse=True).max(level=0)
+    G_df = Spatial_Net
+    cells = np.array(adata.obs_names)
+    cells_id_tran = dict(zip(cells, range(cells.shape[0])))
+    G_df["Cell1"] = G_df["Cell1"].map(cells_id_tran)
+    G_df["Cell2"] = G_df["Cell2"].map(cells_id_tran)
+    G = sp.coo_matrix((np.ones(G_df.shape[0]), (G_df["Cell1"], G_df["Cell2"])), shape=(adata.n_obs, adata.n_obs))
+    G = G + sp.eye(G.shape[0])
+
+    return G
