@@ -14,6 +14,8 @@ class GeneGraph:
     """
     Construct gene graph and implement HMRF in spatial transcriptomics
     """
+    ...
+
 
 
 def annealing(
@@ -222,3 +224,21 @@ def mrf_with_icmem(
         labels_list[i] = labels_mtx[x, y]
     labels_list = label_resort(means, labels_list)
     return labels_list
+
+
+def mrf_with_graph_input(
+    adata: sc.AnnData,
+    gene_id: str,
+    beta: float,
+    max_iter: int,
+    n_components: int = 2,
+):
+    ## Construct a gene graph as downstram input
+    coord = adata.obs[["array_row", "array_col"]].values
+    exp = adata[:, gene_id].X.toarray()
+    graph = get_binary_weight(adata, 1)
+    gmm = mixture.GaussianMixture(n_components=n_components).fit(exp)
+    means, covs = gmm.means_, gmm.covariances_
+    pred = gmm.predict(exp)
+    
+    

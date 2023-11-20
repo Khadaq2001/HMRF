@@ -110,14 +110,14 @@ def get_binary_weight(adata, rad_cutoff):
     return G
 
 
-def get_binary_weight(adata, n_neighbors=6):
+def get_binary_weight(adata, radius=6):
     coor = adata.obs
     coor = coor.loc[:, ["imagerow", "imagecol"]]
     coor.index = adata.obs.index
     coor.columns = ["imagerow", "imagecol"]
 
-    nbrs = NearestNeighbors(n_neighbors=n_neighbors).fit(coor)
-    distances, indices = nbrs.kneighbors(coor, return_distance=True)
+    nbrs = NearestNeighbors(radius = radius).fit(coor)
+    distances, indices = nbrs.radius_neighbors (coor, return_distance=True)
     KNN_list = []
     for it in range(indices.shape[0]):
         KNN_list.append(pd.DataFrame(zip([it] * indices[it].shape[0], indices[it], distances[it])))
@@ -144,3 +144,12 @@ def get_binary_weight(adata, n_neighbors=6):
     G = G + sp.eye(G.shape[0])
 
     return G
+
+
+def getNeighborIndex(neighborMatirx):
+    neighbor_indices = []
+    for i in range(neighborMatirx.shape[0]):
+        for j in range(neighborMatirx.shape[1]):
+            if neighborMatirx[i, j] == 1:
+                neighbor_indices.append((i, j))
+    return neighbor_indices
