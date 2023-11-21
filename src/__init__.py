@@ -1,3 +1,3 @@
-from .impute import *
-from .mrf import *
+from .Impute import *
+from .Graph import *
 from .preprocess import *
