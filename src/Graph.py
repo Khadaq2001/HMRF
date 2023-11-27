@@ -57,7 +57,6 @@ class GeneGraph:
         print(cls_para)
         label_list = self._label_resort(means, label_list)
         self.label = label_list
-        return label_list
 
     def _icmem(
         self,
@@ -108,7 +107,14 @@ class GeneGraph:
                 cls_para[k] = (mean, var)
         return label_list
 
-    def _label_resort(means, label_list):  # Set the label with the highest mean as 1
+    def impute(self):
+        """
+        Impute the expression by considering neighbor cells
+        """
+        self.exp = self._impute(self.exp, self.graph)
+        return self.exp
+
+    def _label_resort(self, means, label_list):  # Set the label with the highest mean as 1
         cls_labels = np.argmax(means[:, 0])
         new_labels = np.zeros_like(label_list)
         new_labels[label_list == cls_labels] = 1
@@ -127,5 +133,16 @@ class GeneGraph:
         # print (new_energy, init_energy)
         return new_energy - init_energy
 
-    def _difference(x, y):
+    def _difference(self, x, y):
         return np.abs(x - y)
+
+    def _impute(self, exp, graph):
+        weight = []
+        cellNum = graph.shape[0]
+        for i in tqdm(range(cellNum)):
+            neighbor_indices = graph[i].indices
+            if neighbor_indices.shape[0] == 0:
+                continue
+            else:
+                exp[i] = np.mean(exp[neighbor_indices])
+        return exp

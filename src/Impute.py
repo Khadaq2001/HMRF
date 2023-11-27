@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import scanpy as sc
+
 
 
 def impute(
@@ -17,6 +17,7 @@ def impute(
         cluster_exp = exp[idx]
         min = np.min(cluster_exp)
         min_index = np.where(cluster_exp == min)
+        print(min_index)
         print(f"imputed spot: {len(min_index[0])}")
         cluster_exp[min_index] = np.mean(cluster_exp)
         exp[idx] = cluster_exp + shift
