@@ -137,12 +137,5 @@ class GeneGraph:
         return np.abs(x - y)
 
     def _impute(self, exp, graph):
-        weight = []
-        cellNum = graph.shape[0]
-        for i in tqdm(range(cellNum)):
-            neighbor_indices = graph[i].indices
-            if neighbor_indices.shape[0] == 0:
-                continue
-            else:
-                exp[i] = np.mean(exp[neighbor_indices])
-        return exp
+        weightedGragh = graph.copy()
+         
