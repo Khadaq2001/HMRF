@@ -26,11 +26,11 @@ class GeneGraph:
             self.coord = adata.obs[["array_row", "array_col"]].values
         self.constructGraph(radius)
 
-    def constructGraph(self, radius: int = 1):
+    def constructGraph(self, kneighbors: int = 6):
         """
         Construce gene graph based on the nearest neighbor
         """
-        nbrs = NearestNeighbors(radius=radius).fit(self.coord)
+        nbrs = NearestNeighbors(kneighbors=kneighbors).fit(self.coord)
         distance, indices = nbrs.kneighbors(self.coord, return_distance=True)
         KNN_list = []
         for i in range(indices.shape[0]):

@@ -90,7 +90,7 @@ def main():
     print(principalComponents)
     corr = getCorr(principalComponents)
     print(corr)
-    
+
 
 if __name__ == "__main__":
     main()
