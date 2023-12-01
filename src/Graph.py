@@ -5,7 +5,8 @@ import scanpy as sc
 import parmap  # type: ignore
 import multiprocessing as mp
 import random
-from sklearn import mixture, neighbors
+from sklearn.mixture import GaussianMixture
+from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 from scipy import sparse as sp
 
@@ -29,8 +30,8 @@ class GeneGraph:
         """
         Construce gene graph based on the nearest neighbor
         """
-        nbrs = neighbors.NearestNeighbors(radius=radius).fit(self.coord)
-        distance, indices = nbrs.radius_neighbors(self.coord, return_distance=True)
+        nbrs = NearestNeighbors(radius=radius).fit(self.coord)
+        distance, indices = nbrs.kneighbors(self.coord, return_distance=True)
         KNN_list = []
         for i in range(indices.shape[0]):
             KNN_list.append(
@@ -55,7 +56,7 @@ class GeneGraph:
         """
         Implement HMRF with ICMEM
         """
-        gmm = mixture.GaussianMixture(n_components=n_components).fit(self.exp)
+        gmm = GaussianMixture(n_components=n_components).fit(self.exp)
         means, covs = gmm.means_, gmm.covariances_
         pred = gmm.predict(self.exp).reshape(-1)
         cls = set(pred)
@@ -164,3 +165,30 @@ class GeneGraph:
 
     def _impute(self, exp, graph):
         weightedGragh = graph.copy()
+        ...  # TODO
+
+
+def getCorr(exp_matrix: pd.DataFrame, n_comp: int = 10):
+    """
+    Calculate the correlation between cells based on the principal components
+    """
+    scaler = StandardScaler()
+    pca = PCA(n_components=n_comp)
+    dataScaled = scaler.fit_transform(exp_matrix)
+    principalComponents = pca.fit_transform(dataScaled)
+    principalComponents = pd.DataFrame(principalComponents)
+    corr = np.corrcoef(principalComponents)
+    return corr
+
+
+def expImputate(
+    cor_matrix: np.ndarray,
+    graph: sp.csr_matrix,
+    exp_matrix: pd.DataFrame,
+):
+    """
+    Imputate the expression matrix based on the correlation and graph
+    """
+
+    ...
+    # TODO
