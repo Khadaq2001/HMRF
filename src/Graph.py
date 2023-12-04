@@ -7,54 +7,54 @@ import multiprocessing as mp
 import random
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from scipy import sparse as sp
 
 
 class GeneGraph:
-
     """
     Construct gene graph and implement HMRF in spatial transcriptomics
     """
 
-    def __init__(self, adata: sc.AnnData, gene_id: str, radius: int = 1):
-        self.exp = adata[:, gene_id].X.toarray()
-        self.cellNum = adata.n_obs
-        if "spatial" in adata.obsm:
-            self.coord = adata.obsm["spatial"]
-        else:
-            self.coord = adata.obs[["array_row", "array_col"]].values
-        self.constructGraph(radius)
-
-    def constructGraph(self, kneighbors: int = 6):
-        """
-        Construce gene graph based on the nearest neighbor
-        """
-        nbrs = NearestNeighbors(kneighbors=kneighbors).fit(self.coord)
-        distance, indices = nbrs.kneighbors(self.coord, return_distance=True)
-        KNN_list = []
-        for i in range(indices.shape[0]):
-            KNN_list.append(
-                pd.DataFrame(zip([i] * indices[i].shape[0], indices[i], distance[i]))
-            )
-        KNN_df = pd.concat(KNN_list)
-        KNN_df.columns = ["cell1", "cell2", "distance"]
-        Spatial_Net = KNN_df.copy()
-        Spatial_Net = Spatial_Net.loc[Spatial_Net["distance"] > 0,]
-        graph = sp.coo_matrix(
-            (
-                np.ones(Spatial_Net.shape[0]),
-                (Spatial_Net["cell1"], Spatial_Net["cell2"]),
-            ),
-            shape=(self.cellNum, self.cellNum),
+    def __init__(self, adata: sc.AnnData, gene_id: str, kneighbors: int):
+        self.exp = (
+            adata[:, gene_id].X.toarray()
+            if isinstance(adata[:, gene_id].X, sp.csr_matrix)
+            else adata[:, gene_id].X
         )
-        graph = graph + sp.eye(graph.shape[0])
-        self.graph = graph
+        self.cellNum = adata.n_obs
+        self.coord = adata.obsm.get(
+            "spatial", adata.obs[["array_row", "array_col"]].values
+        )
+        self.graph = self._construct_graph(kneighbors)
+        self.corr = self._get_corr(adata.X, n_comp=10)
+
+    @staticmethod
+    def _construct_graph(coord, kneighbors: int = 6):
+        """
+        Construct gene graph based on the nearest neighbors
+        """
+        nbrs = NearestNeighbors(n_neighbors=kneighbors).fit(coord)
+        graph = nbrs.kneighbors_graph(coord)
         print("Graph constructed")
+        return graph
+
+    @staticmethod
+    def _get_corr(exp_matrix: np.ndarray, n_comp: int = 10):
+        """
+        Calculate the correlation between cells based on the principal components
+        """
+        scaler = StandardScaler()
+        pca = PCA(n_components=n_comp)
+        exp_matrix_scaled = scaler.fit_transform(exp_matrix)
+        principal_components = pca.fit_transform(exp_matrix_scaled)
+        return np.corrcoef(principal_components)
 
     def mrf_with_icmem(self, beta, n_components=2, icm_iter=10, max_iter=10):
         """
-        Implement HMRF with ICMEM
+        Implement HMRF with ICM-EM
         """
         gmm = GaussianMixture(n_components=n_components).fit(self.exp)
         means, covs = gmm.means_, gmm.covariances_
@@ -68,6 +68,14 @@ class GeneGraph:
         print(cls_para)
         label_list = self._label_resort(means, label_list)
         self.label = label_list
+
+    def _label_resort(
+        self, means, label_list
+    ):  # Set the label with the highest mean as 1
+        cls_labels = np.argmax(means[:, 0])
+        new_labels = np.zeros_like(label_list)
+        new_labels[label_list == cls_labels] = 1
+        return new_labels
 
     def _icmem(
         self,
@@ -126,21 +134,6 @@ class GeneGraph:
                 cls_para[k] = (mean, var)
         return label_list
 
-    def impute(self):
-        """
-        Impute the expression by considering neighbor cells
-        """
-        self.exp = self._impute(self.exp, self.graph)
-        return self.exp
-
-    def _label_resort(
-        self, means, label_list
-    ):  # Set the label with the highest mean as 1
-        cls_labels = np.argmax(means[:, 0])
-        new_labels = np.zeros_like(label_list)
-        new_labels[label_list == cls_labels] = 1
-        return new_labels
-
     def _delta_energy(self, label_list, index, exp, graph, cls_para, new_label, beta):
         neighbor_indices = graph[index].indices
         mean, var = cls_para[label_list[index]]
@@ -163,32 +156,9 @@ class GeneGraph:
     def _difference(self, x, y):
         return np.abs(x - y)
 
-    def _impute(self, exp, graph):
-        weightedGragh = graph.copy()
-        ...  # TODO
-
-
-def getCorr(exp_matrix: pd.DataFrame, n_comp: int = 10):
-    """
-    Calculate the correlation between cells based on the principal components
-    """
-    scaler = StandardScaler()
-    pca = PCA(n_components=n_comp)
-    dataScaled = scaler.fit_transform(exp_matrix)
-    principalComponents = pca.fit_transform(dataScaled)
-    principalComponents = pd.DataFrame(principalComponents)
-    corr = np.corrcoef(principalComponents)
-    return corr
-
-
-def expImputate(
-    cor_matrix: np.ndarray,
-    graph: sp.csr_matrix,
-    exp_matrix: pd.DataFrame,
-):
-    """
-    Imputate the expression matrix based on the correlation and graph
-    """
-
-    ...
-    # TODO
+    def impute(self):
+        """
+        Impute the expression by considering neighbor cells
+        """
+        
+        

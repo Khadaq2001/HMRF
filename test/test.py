@@ -3,7 +3,9 @@ import numpy as np
 from scipy.spatial.distance import cdist
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
+from sklearn.neighbors import NearestNeighbors
+from scipy import sparse as sp
+from ..src.Graph import GeneGraph
 
 def readSpatialExpression(
     file,
@@ -81,16 +83,13 @@ def main():
     dataDir = "../../dataset/MOB-breast_cancer/Rep11_MOB_count_matrix-1.tsv"
     locs, data, _ = readSpatialExpression(dataDir)
     print(data.shape)
-
     scaler = StandardScaler()
     pca = PCA(n_components=n_component)
     dataScaled = scaler.fit_transform(data)
     principalComponents = pca.fit_transform(dataScaled)
     principalComponents = pd.DataFrame(principalComponents)
-    print(principalComponents)
-    corr = getCorr(principalComponents)
-    print(corr)
-
+    corrMatrix = getCorr(principalComponents)
+    
 
 if __name__ == "__main__":
     main()
