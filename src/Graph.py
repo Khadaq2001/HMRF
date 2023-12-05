@@ -28,11 +28,53 @@ class GeneGraph:
         self.coord = adata.obsm.get(
             "spatial", adata.obs[["array_row", "array_col"]].values
         )
-        self.graph = self._construct_graph(kneighbors)
+        self.graph = self._construct_graph(self.coord, kneighbors)
         self.corr = self._get_corr(adata.X, n_comp=10)
 
+    def mrf_with_icmem(self, beta, n_components=2, icm_iter=10, max_iter=10):
+        """
+        Implement HMRF with ICM-EM
+        """
+        gmm = GaussianMixture(n_components=n_components).fit(self.exp)
+        means, covs = gmm.means_, gmm.covariances_
+        pred = gmm.predict(self.exp).reshape(-1)
+        cls = set(pred)
+        cls_para = means.reshape(-1), covs.reshape(-1)
+        cls_para = np.array(cls_para).T
+        label_list = self._icmem(
+            pred, beta, cls, cls_para, self.exp, self.graph, icm_iter, max_iter
+        )
+        print(cls_para)
+        label_list = self._label_resort(means, label_list)
+        self.label = label_list
+
+    def impute(self, alpha: float = 0.5, theta: float = 0.5):
+        """
+        Impute the expression by considering neighbor cells
+
+        Args:
+            alpha (float): The scaling factor for the correlation matrix. Default is 0.5.
+            theta (float): The replacement value for non-matching labels in the label matrix. Default is 0.5.
+
+        Returns:
+            None
+
+        """
+        label = self.label
+        graph = self.graph.toarray()
+        corrMatrix = abs(np.multiply(graph, self.corr))
+        corrMatrix = corrMatrix - np.eye(corrMatrix.shape[0])
+        corrMatrix = corrMatrix / (corrMatrix.sum(axis=1).reshape(-1, 1) / alpha)
+        adjacencyMatrix = corrMatrix + np.eye(corrMatrix.shape[0])
+        labelMatrix = (label.reshape(-1, 1) == label.reshape(1, -1)).astype(float)
+        labelMatrix[labelMatrix == 0] = theta
+        adjacencyMatrix = np.multiply(adjacencyMatrix, labelMatrix)
+        imputedExp = np.matmul(adjacencyMatrix, self.exp)
+        self.imputedExp = imputedExp
+        print("Imputation finished")
+
     @staticmethod
-    def _construct_graph(coord, kneighbors: int = 6):
+    def _construct_graph(coord: np.ndarray, kneighbors: int = 6):
         """
         Construct gene graph based on the nearest neighbors
         """
@@ -51,23 +93,6 @@ class GeneGraph:
         exp_matrix_scaled = scaler.fit_transform(exp_matrix)
         principal_components = pca.fit_transform(exp_matrix_scaled)
         return np.corrcoef(principal_components)
-
-    def mrf_with_icmem(self, beta, n_components=2, icm_iter=10, max_iter=10):
-        """
-        Implement HMRF with ICM-EM
-        """
-        gmm = GaussianMixture(n_components=n_components).fit(self.exp)
-        means, covs = gmm.means_, gmm.covariances_
-        pred = gmm.predict(self.exp).reshape(-1)
-        cls = set(pred)
-        cls_para = means.reshape(-1), covs.reshape(-1)
-        cls_para = np.array(cls_para).T
-        label_list = self._icmem(
-            pred, beta, cls, cls_para, self.exp, self.graph, icm_iter, max_iter
-        )
-        print(cls_para)
-        label_list = self._label_resort(means, label_list)
-        self.label = label_list
 
     def _label_resort(
         self, means, label_list
@@ -155,14 +180,3 @@ class GeneGraph:
 
     def _difference(self, x, y):
         return np.abs(x - y)
-
-    def impute(self):
-        """
-        Impute the expression by considering neighbor cells
-        """
-        corr = self.corr
-        graph = self.graph 
-        adjancyMatirx = np.multiply(corr, graph)
-        
-        
-        
