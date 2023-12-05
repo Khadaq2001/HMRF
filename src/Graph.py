@@ -53,8 +53,8 @@ class GeneGraph:
         Impute the expression by considering neighbor cells
 
         Args:
-            alpha (float): The scaling factor for the correlation matrix. Default is 0.5.
-            theta (float): The replacement value for non-matching labels in the label matrix. Default is 0.5.
+            alpha : The scaling weight for the correlation matrix.
+            theta : The replacement value for non-matching labels in the label matrix
 
         Returns:
             None
