@@ -160,5 +160,9 @@ class GeneGraph:
         """
         Impute the expression by considering neighbor cells
         """
+        corr = self.corr
+        graph = self.graph 
+        adjancyMatirx = np.multiply(corr, graph)
+        
         
         
