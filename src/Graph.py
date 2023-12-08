@@ -13,12 +13,15 @@ from tqdm import tqdm
 from scipy import sparse as sp
 
 
-class GeneGraph:
+class SingleGeneGraph:
     """
     Construct gene graph and implement HMRF in spatial transcriptomics
     """
 
-    def __init__(self, adata: sc.AnnData, gene_id: str, kneighbors: int):
+    def __init__(
+        self, adata: sc.AnnData, gene_id: str, kneighbors: int, verbose: bool = True
+    ):
+        self.verbose = verbose
         self.exp = (
             adata[:, gene_id].X.toarray()
             if isinstance(adata[:, gene_id].X, sp.csr_matrix)
@@ -44,7 +47,8 @@ class GeneGraph:
         label_list = self._icmem(
             pred, beta, cls, cls_para, self.exp, self.graph, icm_iter, max_iter
         )
-        print(cls_para)
+        if self.verbose:
+            print(cls_para)
         label_list = self._label_resort(means, label_list)
         self.label = label_list
 
@@ -71,7 +75,8 @@ class GeneGraph:
         adjacencyMatrix = np.multiply(adjacencyMatrix, labelMatrix)
         imputedExp = np.matmul(adjacencyMatrix, self.exp)
         self.imputedExp = imputedExp
-        print("Imputation finished")
+        if self.verbose:
+            print("Imputation finished")
 
     @staticmethod
     def _construct_graph(coord: np.ndarray, kneighbors: int = 6):
@@ -80,7 +85,6 @@ class GeneGraph:
         """
         nbrs = NearestNeighbors(n_neighbors=kneighbors).fit(coord)
         graph = nbrs.kneighbors_graph(coord)
-        print("Graph constructed")
         return graph
 
     @staticmethod
@@ -115,7 +119,8 @@ class GeneGraph:
     ):
         cellNum = graph.shape[0]
         clsNum = len(cls)
-        for _ in tqdm(range(max_iter)):
+        pbar = tqdm(range(max_iter)) if self.verbose else range(max_iter)
+        for _ in pbar:
             # ICM step
             temp_order = np.arange(cellNum)
             delta = float("-inf")
@@ -180,3 +185,16 @@ class GeneGraph:
 
     def _difference(self, x, y):
         return np.abs(x - y)
+
+
+class AllGeneGraph:
+    def __init__(self, adata, kneighbor):
+        self.exp = adata.X.toarray() if isinstance(adata.X, sp.csr_matrix) else adata.X
+        self.cellNum = adata.n_obs
+        self.coord = adata.obsm.get(
+            "spatial", adata.obs[["array_row", "array_col"]].values
+        )
+        self.graph = self._construct_graph(self.coord, kneighbor)
+        self.corr = self._get_corr(self.exp, n_comp=10)
+
+    ...
