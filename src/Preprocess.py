@@ -23,7 +23,7 @@ def data_preprocess(adata, min_genes=200, min_cells=3, high_var=False, n_top=Non
     sc.pp.log1p(adata)
     if high_var:
         if n_top:
-            sc.pp.highly_variable_genes(adata, n_top)
+            sc.pp.highly_variable_genes(adata, n_top_genes=n_top)
         else:
             sc.pp.highly_variable_genes(
                 adata, min_mean=0.0125, max_mean=3, min_disp=0.5

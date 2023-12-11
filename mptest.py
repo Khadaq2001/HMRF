@@ -1,28 +1,53 @@
-import multiprocessing
+import numpy as np
+import pandas as pd
+import scanpy as sc
+from src import Preprocess
+from src.Graph import SingleGeneGraph
 from tqdm import tqdm
-from time import sleep
+import multiprocessing as mp
+from multiprocessing import Manager
+
+kneighbors, beta = 6, 3
+NP = 3
+adata = sc.read_visium("../dataset/goldStandard")
+adata.var_names_make_unique()
+adata = Preprocess.data_preprocess(adata, high_var=True, n_top=3000)
+geneList = adata.var_names
+pbar = tqdm(total=len(geneList))
 
 
-# Function to process each item
-def process_item(item):
-    # Replace 'do_something' with actual work
-    print(item)
-    return item
+def process_gene(gene, imputedExpDict, lock):
+    graph = SingleGeneGraph(adata, gene, kneighbors, verbose=False)
+    graph.mrf_with_icmem(beta=beta, icm_iter=3, max_iter=5)
+    graph.impute(alpha=0.6, theta=0.2)
+    with lock:
+        imputedExpDict[gene] = graph.imputedExp.reshape(-1)
+    return gene
 
 
-# Prepare your data
-items = range(1000)  # Replace with your list of items
+def update(args):
+    # gene, imputedExpDict = args
+    pbar.update()
 
-# Set up the multiprocessing pool and specify the number of processes
-pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
-# Map the function over the items using the pool
-# We use 'tqdm' to create a progress bar
-for _ in tqdm(pool.imap_unordered(process_item, items), total=len(items)):
-    pass
+def main():
+    manage = Manager()
+    imputedExpDict = manage.dict()
+    lock = manage.Lock()
 
-# Don't forget to close the pool
-pool.close()
-pool.join()
+    pool = mp.Pool(NP)
+    for gene in geneList:
+        pool.apply_async(
+            process_gene, args=(gene, imputedExpDict, lock), callback=update
+        )
 
-print(items[0])
+    pool.close()
+    pool.join()
+    imputedExp = pd.DataFrame.from_dict(
+        imputedExpDict, orient="index", columns=adata.obs.index
+    )
+    imputedExp = imputedExp.T
+    imputedExp.to_csv("imputedExp.csv")
+
+if __name__ =="__main__":
+    main()
