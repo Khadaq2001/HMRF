@@ -1,15 +1,12 @@
 from hmac import new
 import numpy as np
 import pandas as pd
-import parmap  # type: ignore
-import multiprocessing as mp
-import random
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-from scipy import cluster, sparse as sp
+from scipy import  sparse as sp
 
 
 class SingleGeneGraph:
@@ -31,7 +28,7 @@ class SingleGeneGraph:
         """
         Implement HMRF with ICM-EM
         """
-        gmm = GaussianMixture(n_components=n_components).fit(self.exp)
+        gmm = GaussianMixture(n_components=n_components).fit(self.exp.reshape(-1, 1))
         means, covs = gmm.means_, gmm.covariances_
         pred = gmm.predict(self.exp).reshape(-1)
         cls = set(pred)
@@ -168,14 +165,3 @@ class SingleGeneGraph:
         return np.abs(x - y)
 
 
-class AllGeneGraph:
-    def __init__(self, adata, kneighbor):
-        self.exp = adata.X.toarray() if isinstance(adata.X, sp.csr_matrix) else adata.X
-        self.cellNum = adata.n_obs
-        self.coord = adata.obsm.get(
-            "spatial", adata.obs[["array_row", "array_col"]].values
-        )
-        self.graph = self._construct_graph(self.coord, kneighbor)
-        self.corr = self._get_corr(self.exp, n_comp=10)
-
-    ...
