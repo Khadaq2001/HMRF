@@ -10,7 +10,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
-from scipy import sparse as sp
+from scipy import cluster, sparse as sp
 
 
 class SingleGeneGraph:
@@ -44,13 +44,13 @@ class SingleGeneGraph:
         cls = set(pred)
         cls_para = means.reshape(-1), covs.reshape(-1)
         cls_para = np.array(cls_para).T
-        label_list = self._icmem(
+        labelList = self._icmem(
             pred, beta, cls, cls_para, self.exp, self.graph, icm_iter, max_iter
         )
         if self.verbose:
             print(cls_para)
-        label_list = self._label_resort(means, label_list)
-        self.label = label_list
+        labelList = self._label_resort(means, labelList)
+        self.label = labelList
 
     def impute(self, alpha: float = 0.5, theta: float = 0.5):
         """
@@ -99,19 +99,19 @@ class SingleGeneGraph:
         return np.corrcoef(principal_components)
 
     def _label_resort(
-        self, means, label_list
+        self, means, labelList
     ):  # Set the label with the highest mean as 1
-        cls_labels = np.argmax(means[:, 0])
-        new_labels = np.zeros_like(label_list)
-        new_labels[label_list == cls_labels] = 1
-        return new_labels
+        clsLabel = np.argmax(means[:, 0])
+        newLabels = np.zeros_like(labelList)
+        newLabels[labelList == clsLabel] = 1
+        return newLabels
 
     def _icmem(
         self,
-        label_list: np.ndarray,
+        labelList: np.ndarray,
         beta: float,
         cls: set,
-        cls_para: np.ndarray,
+        clsPara: np.ndarray,
         exp: np.ndarray,
         graph: sp.csr_matrix,
         icm_iter: int = 10,
@@ -119,8 +119,11 @@ class SingleGeneGraph:
     ):
         cellNum = graph.shape[0]
         clsNum = len(cls)
+        changed = 0
         pbar = tqdm(range(max_iter)) if self.verbose else range(max_iter)
-        for _ in pbar:
+        for totalIter in pbar:
+            if (changed == 0)  and (totalIter > 0):
+                break
             # ICM step
             temp_order = np.arange(cellNum)
             delta = float("-inf")
@@ -131,57 +134,42 @@ class SingleGeneGraph:
                 changed = 0
                 np.random.shuffle(temp_order)
                 for i in temp_order:
-                    clsList = list(cls)
-                    clsList.remove(label_list[i])
-                    new_label = random.choice(clsList)
-                    temp_delta = self._delta_energy(
-                        label_list, i, exp, graph, cls_para, new_label, beta
-                    )
+                    newLabel = np.abs(labelList[i] - 1) 
+                    temp_delta = self._delta_energy(labelList, i, exp, graph, clsPara, newLabel, beta)
                     if temp_delta < 0:
-                        label_list[i] = new_label
+                        labelList[i] = newLabel
                         delta += temp_delta
                         changed += 1
                 iter += 1
 
-            cluster_prob = np.zeros([cellNum, clsNum])
-            # E Step
-            for i in range(cellNum):
-                for k in range(clsNum):
-                    mean, var = cls_para[k]
-                    cluster_prob[i, k] = (1 / np.sqrt(2 * np.pi * var)) * np.exp(
-                        -((exp[i] - mean) ** 2) / (2 * var)
-                    )
-            cluster_prob /= np.sum(cluster_prob, axis=1).reshape(-1, 1)
-            # M Step
-            for k in range(clsNum):
-                mean = np.sum(cluster_prob[:, k].reshape(-1, 1) * exp) / np.sum(
-                    cluster_prob[:, k]
-                )
-                var = np.sum(
-                    cluster_prob[:, k].reshape(-1, 1) * (exp - mean) ** 2
-                ) / np.sum(cluster_prob[:, k])
-                var = 1e-5 if var == 0 else var
-                cls_para[k] = (mean, var)
-        return label_list
+            clusterProb = np.zeros([cellNum, clsNum])
 
-    def _delta_energy(self, label_list, index, exp, graph, cls_para, new_label, beta):
-        neighbor_indices = graph[index].indices
-        mean, var = cls_para[label_list[index]]
-        init_energy = np.log(np.sqrt(2 * np.pi * var)) + (exp[index] - mean) ** 2 / (
-            2 * var
-        )
-        for neighbor in neighbor_indices:
-            init_energy += beta * self._difference(
-                label_list[index], label_list[neighbor]
-            )
-        mean_new, var_new = cls_para[new_label]
-        new_energy = np.log(np.sqrt(2 * np.pi * var_new)) + (
-            exp[index] - mean_new
-        ) ** 2 / (2 * var_new)
-        for neighbor in neighbor_indices:
-            new_energy += beta * self._difference(new_label, label_list[neighbor])
-        # print (new_energy, init_energy)
-        return new_energy - init_energy
+            # E step Vectorized 
+            means, vars = clsPara[:,0], clsPara[:,1]
+            vars[np.isclose(vars, 0)] = 1e-5
+            expDiffSquered = (exp[:, np.newaxis] - means)**2
+            clusterProb = np.exp(-0.5 * expDiffSquered / vars) / np.sqrt(2 * np.pi * vars )
+            clusterProb = clusterProb / np.sum(clusterProb, axis=1).reshape(-1, 1)
+            # M Step Vectorized
+            weights = clusterProb/ clusterProb.sum(axis=0, keepdims=True) 
+            means = np.sum(exp[:, np.newaxis] * weights, axis=0)
+            vars = np.sum(weights * expDiffSquered, axis=0) / weights.sum(axis=0)
+            vars[np.isclose(vars, 0)] = 1e-5
+            clsPara = np.stack([means, vars], axis=1)
+        return labelList
+
+    def _delta_energy(self, labelList, index, exp, graph, cls_para, newLabel, beta):
+        neighborIndices = graph[index].indices
+        mean, var = cls_para[labelList[index]]
+        newMean, newVar = cls_para[newLabel]
+        initEnergyConst = np.log(np.sqrt(2 * np.pi * var)) + (exp[index] -mean) ** 2 / (2* var)
+        newEnergyConst = np.log(np.sqrt(2 * np.pi * newVar)) + (exp[index] - newMean) ** 2 / (2 * newVar)
+        initEnergyNeighbors = beta * np.sum(self._difference(exp[index], exp[neighborIndices]))
+        newEnergyNeighbors = beta * np.sum(self._difference(exp[index], exp[neighborIndices]))
+        initEnergy = initEnergyConst + initEnergyNeighbors
+        newEnergy = newEnergyConst + newEnergyNeighbors
+        return newEnergy - initEnergy
+         
 
     def _difference(self, x, y):
         return np.abs(x - y)
