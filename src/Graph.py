@@ -1,7 +1,6 @@
 from hmac import new
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import parmap  # type: ignore
 import multiprocessing as mp
 import random
@@ -19,20 +18,14 @@ class SingleGeneGraph:
     """
 
     def __init__(
-        self, adata: sc.AnnData, gene_id: str, kneighbors: int, verbose: bool = True
+        self, gene_id: str,exp: np.ndarray, coord : np.ndarray,   kneighbors: int, verbose: bool = True,
     ):
         self.verbose = verbose
-        self.exp = (
-            adata[:, gene_id].X.toarray()
-            if isinstance(adata[:, gene_id].X, sp.csr_matrix)
-            else adata[:, gene_id].X
-        )
-        self.cellNum = adata.n_obs
-        self.coord = adata.obsm.get(
-            "spatial", adata.obs[["array_row", "array_col"]].values
-        )
+        self.exp = exp[:, gene_id] 
+        self.cellNum = exp.shape[0]
+        self.coord = coord 
         self.graph = self._construct_graph(self.coord, kneighbors)
-        self.corr = self._get_corr(adata.X, n_comp=10)
+        self.corr = self._get_corr(exp, n_comp=10)
 
     def mrf_with_icmem(self, beta, n_components=2, icm_iter=10, max_iter=10):
         """
@@ -42,13 +35,13 @@ class SingleGeneGraph:
         means, covs = gmm.means_, gmm.covariances_
         pred = gmm.predict(self.exp).reshape(-1)
         cls = set(pred)
-        cls_para = means.reshape(-1), covs.reshape(-1)
-        cls_para = np.array(cls_para).T
+        clsPara = means.reshape(-1), covs.reshape(-1)
+        clsPara = np.array(clsPara).T
         labelList = self._icmem(
-            pred, beta, cls, cls_para, self.exp, self.graph, icm_iter, max_iter
+            pred, beta, cls, clsPara, self.exp, self.graph, icm_iter, max_iter
         )
         if self.verbose:
-            print(cls_para)
+            print(clsPara)
         labelList = self._label_resort(means, labelList)
         self.label = labelList
 
@@ -114,8 +107,8 @@ class SingleGeneGraph:
         clsPara: np.ndarray,
         exp: np.ndarray,
         graph: sp.csr_matrix,
-        icm_iter: int = 10,
-        max_iter: int = 10,
+        icm_iter: int = 4,
+        max_iter: int = 8,
     ):
         cellNum = graph.shape[0]
         clsNum = len(cls)
@@ -158,10 +151,10 @@ class SingleGeneGraph:
             clsPara = np.stack([means, vars], axis=1)
         return labelList
 
-    def _delta_energy(self, labelList, index, exp, graph, cls_para, newLabel, beta):
+    def _delta_energy(self, labelList, index, exp, graph, clsPara, newLabel, beta):
         neighborIndices = graph[index].indices
-        mean, var = cls_para[labelList[index]]
-        newMean, newVar = cls_para[newLabel]
+        mean, var = clsPara[labelList[index]]
+        newMean, newVar = clsPara[newLabel]
         initEnergyConst = np.log(np.sqrt(2 * np.pi * var)) + (exp[index] -mean) ** 2 / (2* var)
         newEnergyConst = np.log(np.sqrt(2 * np.pi * newVar)) + (exp[index] - newMean) ** 2 / (2 * newVar)
         initEnergyNeighbors = beta * np.sum(self._difference(exp[index], exp[neighborIndices]))
@@ -170,8 +163,8 @@ class SingleGeneGraph:
         newEnergy = newEnergyConst + newEnergyNeighbors
         return newEnergy - initEnergy
          
-
-    def _difference(self, x, y):
+    @staticmethod
+    def _difference(x, y):
         return np.abs(x - y)
 
 
