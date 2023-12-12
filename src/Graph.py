@@ -109,11 +109,12 @@ class SingleGeneGraph:
         graph: sp.csr_matrix,
         icm_iter: int = 2,
         max_iter: int = 8,
+        convengency_threshold: float = 1e-4
     ):
         sqrt2pi = np.sqrt(2 * np.pi)
         cellNum = graph.shape[0]
         clsNum = len(cls)
-
+        preClsPara = clsPara.copy()
         with tqdm(range(max_iter), disable=not self.verbose) as pbar:
             for iter in pbar:
                 # ICM step
@@ -149,7 +150,11 @@ class SingleGeneGraph:
                 vars = np.sum(weights * expDiffSquared, axis=0) / weights.sum(axis=0)
                 vars[np.isclose(vars, 0)] = 1e-5
 
-                clsPara = np.column_stack([means, vars])
+                newClsPara = np.column_stack([means, vars])
+                paraChange = np.max(np.abs(newClsPara - preClsPara))
+                if paraChange < convengency_threshold:
+                    break
+                preClsPara = newClsPara
 
         return labelList
 
