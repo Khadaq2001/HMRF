@@ -28,7 +28,7 @@ class SingleGeneGraph:
         self.cellNum = exp.shape[0]
         self.coord = coord
         self.graph = self._construct_graph(self.coord, kneighbors)
-        self.corr = self._get_corr(exp, n_comp=10)
+        self.corr = self._get_corr(exp.values, n_comp=10)
 
     def mrf_with_icmem(self, beta, n_components=2, icm_iter=3, max_iter=10):
         """
@@ -109,7 +109,7 @@ class SingleGeneGraph:
         graph: sp.csr_matrix,
         icm_iter: int = 2,
         max_iter: int = 8,
-        convengency_threshold: float = 1e-4
+        convengency_threshold: float = 1e-4,
     ):
         sqrt2pi = np.sqrt(2 * np.pi)
         cellNum = graph.shape[0]
@@ -153,6 +153,8 @@ class SingleGeneGraph:
                 newClsPara = np.column_stack([means, vars])
                 paraChange = np.max(np.abs(newClsPara - preClsPara))
                 if paraChange < convengency_threshold:
+                    if self.verbose:
+                        print("Convergence reached")
                     break
                 preClsPara = newClsPara
 
