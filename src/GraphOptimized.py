@@ -6,13 +6,19 @@ from sklearn.decomposition import PCA
 import scipy.sparse as sp
 from tqdm import tqdm
 
+
 class SingleGeneGraph:
     """
     Construct gene graph and implement HMRF in spatial transcriptomics
     """
 
     def __init__(
-        self, gene_id: str, exp: np.ndarray, coord: np.ndarray, kneighbors: int, verbose: bool = True,
+        self,
+        gene_id: str,
+        exp: np.ndarray,
+        coord: np.ndarray,
+        kneighbors: int,
+        verbose: bool = True,
     ):
         self.verbose = verbose
         self.exp = exp[:, gene_id]
@@ -36,7 +42,16 @@ class SingleGeneGraph:
 
         # Replaced the set 'cls' with a pre-calculated range based on 'n_components'
         range_n_components = np.arange(n_components)
-        labelList = self._icmem(pred, beta, range_n_components, clsPara, self.exp, self.graph, icm_iter, max_iter)
+        labelList = self._icmem(
+            pred,
+            beta,
+            range_n_components,
+            clsPara,
+            self.exp,
+            self.graph,
+            icm_iter,
+            max_iter,
+        )
         if self.verbose:
             print(clsPara)
         labelList = self._label_resort(means, labelList)
@@ -51,7 +66,9 @@ class SingleGeneGraph:
         Construct gene graph based on the nearest neighbors
         """
         # Optimized graph construction by not calling fit method separately
-        graph = NearestNeighbors(n_neighbors=kneighbors).fit(coord).kneighbors_graph(coord)
+        graph = (
+            NearestNeighbors(n_neighbors=kneighbors).fit(coord).kneighbors_graph(coord)
+        )
         return graph
 
     @staticmethod
@@ -60,7 +77,9 @@ class SingleGeneGraph:
         Calculate the correlation between cells based on the principal components
         """
         # Combined the steps for scaling and PCA transformation
-        return np.corrcoef(PCA(n_comp).fit_transform(StandardScaler().fit_transform(exp_matrix)))
+        return np.corrcoef(
+            PCA(n_comp).fit_transform(StandardScaler().fit_transform(exp_matrix))
+        )
 
     # No change in _label_resort function
     ...
@@ -92,8 +111,12 @@ class SingleGeneGraph:
                 temp_order = np.arange(cellNum)
                 np.random.shuffle(temp_order)
                 for i in temp_order:
-                    newLabel = (labelList[i] + 1) % clsNum  # Assuming binary classes, changed from abs(x - 1) for sustainability in multi-class scenario
-                    temp_delta = self._delta_energy(labelList, i, exp, graph, clsPara, newLabel, beta)
+                    newLabel = (
+                        labelList[i] + 1
+                    ) % clsNum  # Assuming binary classes, changed from abs(x - 1) for sustainability in multi-class scenario
+                    temp_delta = self._delta_energy(
+                        labelList, i, exp, graph, clsPara, newLabel, beta
+                    )
                     if temp_delta < 0:
                         labelList[i] = newLabel
                         changed += 1
@@ -103,10 +126,12 @@ class SingleGeneGraph:
                 vars = np.clip(vars, 1e-5, np.inf)  # Ensure no division by zero
                 expDiffSquared = (exp[:, None] - means) ** 2
 
-                # E step Vectorized 
-                clusterProb = np.exp(-0.5 * expDiffSquared / vars) / (sqrt_2_pi * np.sqrt(vars))
+                # E step Vectorized
+                clusterProb = np.exp(-0.5 * expDiffSquared / vars) / (
+                    sqrt_2_pi * np.sqrt(vars)
+                )
                 clusterProb /= clusterProb.sum(axis=1)[:, None]
-                
+
                 # M Step Vectorized
                 weights = clusterProb / clusterProb.sum(axis=0)
                 means = (exp[:, None] * weights).sum(axis=0)
@@ -117,7 +142,7 @@ class SingleGeneGraph:
 
                 if not changed:
                     break
-                
+
         return labelList
 
     def _delta_energy(self, labelList, index, exp, graph, clsPara, newLabel, beta):
@@ -127,9 +152,19 @@ class SingleGeneGraph:
         newMean, newVar = clsPara[newLabel]
         sqrt_2_pi_var = np.sqrt(2 * np.pi * var)
         sqrt_2_pi_newVar = np.sqrt(2 * np.pi * newVar)
-        
+
         # Calculate only the change in energy, avoiding full energy calculation
-        delta_energy_const = np.log(sqrt_2_pi_newVar / sqrt_2_pi_var) + ((exp[index] - newMean) ** 2 / newVar) - ((exp[index] - mean) ** 2 / var) / 2
-        delta_energy_neighbors = beta * (np.sign(labelList[neighborIndices] - labelList[index]) != np.sign(labelList[neighborIndices] - newLabel)).sum()
-        
+        delta_energy_const = (
+            np.log(sqrt_2_pi_newVar / sqrt_2_pi_var)
+            + ((exp[index] - newMean) ** 2 / newVar)
+            - ((exp[index] - mean) ** 2 / var) / 2
+        )
+        delta_energy_neighbors = (
+            beta
+            * (
+                np.sign(labelList[neighborIndices] - labelList[index])
+                != np.sign(labelList[neighborIndices] - newLabel)
+            ).sum()
+        )
+
         return delta_energy_const + delta_energy_neighbors
