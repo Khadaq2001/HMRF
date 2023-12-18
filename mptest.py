@@ -1,4 +1,3 @@
-from cProfile import label
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -49,8 +48,8 @@ def main():
     labelDict = manage.dict()
     lock = manage.Lock()
     pool = mp.Pool(NP)
-  #  print(exp)
-  #  print(coord)
+    #  print(exp)
+    #  print(coord)
     for gene in geneList:
         # print(gene)
         pool.apply_async(

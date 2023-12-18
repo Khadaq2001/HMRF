@@ -1,3 +1,4 @@
+from asyncio import base_tasks
 import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
@@ -6,8 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from scipy import sparse as sp
-
-from src.Function import delta_energy
+import multiprocessing as mp
 
 
 class SingleGeneGraph:
@@ -19,16 +19,19 @@ class SingleGeneGraph:
         self,
         gene_id: str,
         exp: pd.DataFrame,
-        coord: np.ndarray,
-        kneighbors: int,
-        verbose: bool = True,
+        graph: sp.csr_matrix = None,
+        corr: np.ndarray = None,
+        coord: np.ndarray = None,
+        kneighbors: int = None,
+        verbose: bool = False,
     ):
         self.verbose = verbose
         self.exp = exp.loc[:, gene_id].values
         self.cellNum = exp.shape[0]
-        self.coord = coord
-        self.graph = self._construct_graph(self.coord, kneighbors)
-        self.corr = self._get_corr(exp.values, n_comp=10)
+        self.graph = (
+            self._construct_graph(coord, kneighbors) if graph is None else graph
+        )
+        self.corr = self._get_corr(exp.values, n_comp=10) if corr is None else corr
 
     def mrf_with_icmem(self, beta, n_components=2, icm_iter=3, max_iter=10):
         """
@@ -182,3 +185,113 @@ class SingleGeneGraph:
     @staticmethod
     def _difference(x, y):
         return np.abs(x - y)
+
+
+class MultiGeneGraph:
+    def __init__(
+        self,
+        exp: pd.DataFrame,
+        coord: np.ndarray,
+        kneighbors: int,
+        n_components: int = 2,
+        beta: int = 3,
+        alpha: float = 0.6,
+        theta: float = 0.2,
+        multiprocess: bool = True,
+        NPROCESS: int = 3,
+    ):
+        self.exp = exp
+        self.cellNum = exp.shape[0]
+        self.geneList = exp.columns
+        self.graph = self._construct_graph(coord, kneighbors)
+        self.corr = self._get_corr(exp_matrix=exp.values, pca=10)
+        self.n_components = n_components
+        self.beta = beta
+        self.alpha = alpha
+        self.theta = theta
+        self.pbar = tqdm(total=len(self.geneList))
+        if multiprocess:
+            self.NP = NPROCESS
+
+    def get_impute(self, save=None):
+        if self.NP == 1:
+            for gene in self.geneList:
+                graph = SingleGeneGraph(gene, self.exp, self.graph, self.corr)
+                graph.mrf_with_icmem(self.beta, self.n_components)
+                graph.impute(self.alpha, self.theta)
+                self.pbar.update()
+        else:
+            manage = mp.Manager()
+            imputedExpDict = manage.dict()
+            labelDict = manage.dict()
+            lock = manage.Lock()
+            pool = mp.Pool(self.NP)
+            for gene in self.geneList:
+                pool.apply_async(
+                    self._process_gene,
+                    args=(
+                        gene,
+                        self.exp,
+                        self.graph,
+                        self.corr,
+                        self.beta,
+                        self.n_components,
+                        self.alpha,
+                        self.theta,
+                        imputedExpDict,
+                        labelDict,
+                        lock,
+                    ),
+                    callback=self._update,
+                )
+            pool.close()
+            pool.join()
+        imputedExp = pd.DataFrame.from_dict(
+            imputedExpDict, orient="index", columns=self.exp.index
+        )
+        imputedExp = imputedExp.T
+        labelDict = pd.DataFrame.from_dict(
+            labelDict, orient="index", columns=self.exp.index
+        )
+        labelDict = labelDict.T
+        if save is not None:
+            imputedExp.to_csv(save + "/imputedExp.csv")
+            labelDict.to_csv(save + "/label.csv")
+            return None
+        else:
+            return imputedExp, labelDict
+
+    def _construct_graph(self, coord, kneighbors):
+        return (
+            NearestNeighbors(n_neighbors=kneighbors).fit(coord).kneighbors_graph(coord)
+        )
+
+    def _get_corr(self, exp_matrix, pca):
+        return np.corrcoef(
+            PCA(pca).fit_transform(StandardScaler().fit_transform(exp_matrix))
+        )
+
+    @staticmethod
+    def _process_gene(
+        gene,
+        exp,
+        graph,
+        corr,
+        beta,
+        n_components,
+        alpha,
+        theta,
+        imputedExpDict,
+        labelDict,
+        lock,
+    ):
+        graph = SingleGeneGraph(gene, exp, graph, corr)
+        graph.mrf_with_icmem(beta, n_components)
+        graph.impute(alpha, theta)
+        with lock:
+            imputedExpDict[gene] = graph.imputedExp.reshape(-1)
+            labelDict[gene] = graph.label.reshape(-1)
+        return gene
+
+    def _update(self, args):
+        self.pbar.update()
