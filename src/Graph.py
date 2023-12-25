@@ -1,5 +1,3 @@
-from asyncio import base_tasks
-from hmac import new
 import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
@@ -47,6 +45,7 @@ class SingleGeneGraph:
         """
         Implement HMRF with ICM-EM
         """
+        self.n_components = n_components
         gmm = GaussianMixture(n_components=n_components).fit(self.exp.reshape(-1, 1))
         means, covs = gmm.means_.ravel(), gmm.covariances_.ravel()
         self.label = gmm.predict(self.exp.reshape(-1, 1))
@@ -124,7 +123,8 @@ class SingleGeneGraph:
         icm_iter: int = 2,
         max_iter: int = 8,
         convengency_threshold: float = 1e-4,
-        update_exp: bool = False,
+        exp_update: bool = False,
+        label_update: bool = False,
         alpha: float = 0.6,
         theta: float = 0.2,
     ):
@@ -174,8 +174,16 @@ class SingleGeneGraph:
                 self.clsPara = newClsPara
 
                 # Update expression matrix
-                if update_exp:
+                # TODO : whether using GMM update labels or not
+                if exp_update:
                     self.exp = self._impute(alpha=alpha, theta=theta)
+                if label_update:
+                    self.label = (
+                        GaussianMixture(n_components=self.n_components)
+                        .fit(self.exp.reshape(-1, 1))
+                        .predict(self.exp.reshape(-1, 1))
+                    )
+
         return
 
     def _delta_energy(self, index, newLabel, beta):

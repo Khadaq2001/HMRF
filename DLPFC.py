@@ -19,19 +19,19 @@ def preprocess_gene(n_top=3000):
     np.savetxt("dataset/gsCoord.csv", coord, delimiter=",", fmt="%d")
 
 
-preprocess_gene()
+# preprocess_gene()
 kneighbors, beta = 18, 3
 NP = 3
-exp = pd.read_csv("dataset/gsExp.csv", index_col=0)
-coord = np.genfromtxt("dataset/gsCoord.csv", delimiter=",", dtype=int)
+exp = pd.read_csv("dataset/DLPFC/expFull.csv", index_col=0)
+coord = np.genfromtxt("dataset/DLPFC/gsCoord.csv", delimiter=",", dtype=int)
 geneList = exp.columns
 pbar = tqdm(total=len(geneList))
 
 
 def process_gene(gene, imputedExpDict, labelDict, lock):
     graph = SingleGeneGraph(gene, exp, coord, kneighbors, verbose=False)
-    graph.mrf_with_icmem(beta=beta, icm_iter=3, max_iter=8)
-    graph.impute(alpha=0.8, theta=0.2)
+    graph.mrf_with_icmem(beta=beta, icm_iter=3, max_iter=8, update_exp=True)
+    graph.impute(alpha=0.6, theta=0.2)
     with lock:
         imputedExpDict[gene] = graph.imputedExp.reshape(-1)
         labelDict[gene] = graph.label.reshape(-1)
@@ -49,8 +49,8 @@ def main():
     labelDict = manage.dict()
     lock = manage.Lock()
     pool = mp.Pool(NP)
-  #  print(exp)
-  #  print(coord)
+    #  print(exp)
+    #  print(coord)
     for gene in geneList:
         # print(gene)
         pool.apply_async(
