@@ -15,8 +15,8 @@ def preprocess_gene(n_top=3000):
     adata = Preprocess.data_preprocess(adata, high_var=True, n_top=n_top)
     exp = adata.to_df()
     coord = adata.obsm["spatial"]
-    exp.to_csv("dataset/gsExp.csv")
-    np.savetxt("dataset/gsCoord.csv", coord, delimiter=",", fmt="%d")
+    exp.to_csv("dataset/DLPFC/gsExp.csv")
+    np.savetxt("dataset/DLPFC/gsCoord.csv", coord, delimiter=",", fmt="%d")
 
 
 # preprocess_gene()
@@ -49,8 +49,8 @@ def main():
     labelDict = manage.dict()
     lock = manage.Lock()
     pool = mp.Pool(NP)
-    #  print(exp)
-    #  print(coord)
+    print(exp)
+    print(coord)
     for gene in geneList:
         # print(gene)
         pool.apply_async(

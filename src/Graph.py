@@ -36,9 +36,11 @@ class SingleGeneGraph:
         self,
         beta,
         n_components=2,
-        icm_iter=3,
-        max_iter=10,
-        update_exp=False,
+        icm_iter=2,
+        max_iter=8,
+        convengency_threshold=1e-5,
+        exp_update=True,
+        label_update=False,
         alpha=0.6,
         theta=0.2,
     ):
@@ -51,8 +53,16 @@ class SingleGeneGraph:
         self.label = gmm.predict(self.exp.reshape(-1, 1))
         self.cls = range(n_components)
         self.clsPara = np.column_stack((means, covs))
+
         self._icmem(
-            beta, icm_iter, max_iter, update_exp=update_exp, alpha=alpha, theta=theta
+            beta,
+            icm_iter,
+            max_iter,
+            convengency_threshold=convengency_threshold,
+            exp_update=exp_update,
+            label_update=label_update,
+            alpha=alpha,
+            theta=theta,
         )
         self._label_resort()
         if self.verbose:
@@ -122,8 +132,8 @@ class SingleGeneGraph:
         beta: float,
         icm_iter: int = 2,
         max_iter: int = 8,
-        convengency_threshold: float = 1e-4,
-        exp_update: bool = False,
+        convengency_threshold: float = 1e-6,
+        exp_update: bool = True,
         label_update: bool = False,
         alpha: float = 0.6,
         theta: float = 0.2,
@@ -157,6 +167,7 @@ class SingleGeneGraph:
                 clusterProb = np.exp(-0.5 * expDiffSquared / vars) / (
                     sqrt2pi * np.sqrt(vars)
                 )
+                clusterProb[np.isclose(clusterProb, 0)] = 1e-5
                 clusterProb = clusterProb / clusterProb.sum(axis=1)[:, None]
 
                 # M Step Vectorized
@@ -178,11 +189,13 @@ class SingleGeneGraph:
                 if exp_update:
                     self.exp = self._impute(alpha=alpha, theta=theta)
                 if label_update:
-                    self.label = (
-                        GaussianMixture(n_components=self.n_components)
-                        .fit(self.exp.reshape(-1, 1))
-                        .predict(self.exp.reshape(-1, 1))
-                    )
+                    print(iter)
+                    if iter == 4:
+                        self.label = (
+                            GaussianMixture(n_components=self.n_components)
+                            .fit(self.exp.reshape(-1, 1))
+                            .predict(self.exp.reshape(-1, 1))
+                        )
 
         return
 
@@ -215,7 +228,7 @@ class MultiGeneGraph:
         self,
         exp: pd.DataFrame,
         coord: np.ndarray,
-        kneighbors: int,
+        kneighbors: int = 18,
         n_components: int = 2,
         beta: int = 3,
         alpha: float = 0.1,
@@ -244,7 +257,9 @@ class MultiGeneGraph:
         labelDict = manage.dict()
         lock = manage.Lock()
         pool = mp.Pool(self.NP)
+
         for gene in self.geneList:
+            # print(gene)
             pool.apply_async(
                 self._process_gene,
                 args=(
@@ -269,6 +284,7 @@ class MultiGeneGraph:
         imputedExp = pd.DataFrame.from_dict(
             imputedExpDict, orient="index", columns=self.exp.index
         )
+
         imputedExp = imputedExp.T
         labelDict = pd.DataFrame.from_dict(
             labelDict, orient="index", columns=self.exp.index
@@ -305,15 +321,18 @@ class MultiGeneGraph:
         imputedExpDict,
         labelDict,
         lock,
-        update=False,
+        update=True,
     ):
-        graph = SingleGeneGraph(gene, exp, graph, corr)
+        graph = SingleGeneGraph(gene_id=gene, exp=exp, graph=graph, corr=corr)
         graph.mrf_with_icmem(
-            beta,
-            n_components,
-            update_exp=update,
+            beta=beta,
+            n_components=n_components,
+            icm_iter=2,
+            max_iter=8,
+            exp_update=update,
             alpha=alpha,
             theta=theta,
+            convengency_threshold=1e-6,
         )
         graph.impute(alpha, theta)
         with lock:
