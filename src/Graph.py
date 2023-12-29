@@ -8,8 +8,6 @@ from tqdm import tqdm
 from scipy import sparse as sp
 import multiprocessing as mp
 
-from src.Function import delta_energy
-
 
 class SingleGeneGraph:
     """
