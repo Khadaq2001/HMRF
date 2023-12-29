@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import random
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
@@ -7,6 +8,8 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from scipy import sparse as sp
 import multiprocessing as mp
+
+from src.Function import delta_energy
 
 
 class SingleGeneGraph:
@@ -27,6 +30,7 @@ class SingleGeneGraph:
         self.verbose = verbose
         self.exp = exp.loc[:, gene_id].values
         self.cellNum = exp.shape[0]
+        self.kneighbors = kneighbors
         self.graph = (
             self._construct_graph(coord, kneighbors) if graph is None else graph
         )
@@ -64,6 +68,7 @@ class SingleGeneGraph:
             alpha=alpha,
             theta=theta,
         )
+
         self._label_resort()
         if self.verbose:
             print(self.clsPara)
@@ -143,6 +148,7 @@ class SingleGeneGraph:
         sqrt2pi = np.sqrt(2 * np.pi)
         cellNum = self.graph.shape[0]
         clsNum = len(self.cls)
+        temp = 1  # TODO Annealing function
         with tqdm(range(max_iter), disable=not self.verbose) as pbar:
             for iter in pbar:
                 # ICM step
@@ -152,28 +158,41 @@ class SingleGeneGraph:
                     np.random.shuffle(temp_order)
                     for index in temp_order:
                         newLabel = (self.label[index] + 1) % clsNum
-                        temp_delta = self._delta_energy(index, newLabel, beta)
-                        if temp_delta < 0:
+                        delta_energy = self._delta_energy(index, newLabel, beta)
+
+                        # MCMC: Metropolis-Hastings
+                        if delta_energy < 0:
                             self.label[index] = newLabel
                             changed += 1
-                        
+                        else:
+                            try:
+                                if -delta_energy / temp < -600:
+                                    prob = 0
+                                else:
+                                    prob = np.exp(-delta_energy)
+                            except:
+                                prob = 0
+                            samp = random.uniform(0, 1)
+                            if samp < prob:
+                                self.label[index] = newLabel
+
                     # print("changed: {} at iteratrion:{}".format(changed, iter))
                     if changed == 0:
                         break
 
-                # EM step initialize
+                # EM step initialization
                 means, vars = self.clsPara.T
                 vars[np.isclose(vars, 0)] = 1e-5
                 expDiffSquared = (self.exp[:, None] - means) ** 2
 
-                # E step Vectorized
+                # E step
                 clusterProb = np.exp(-0.5 * expDiffSquared / vars) / (
                     sqrt2pi * np.sqrt(vars)
                 )
                 clusterProb[np.isclose(clusterProb, 0)] = 1e-5
                 clusterProb = clusterProb / clusterProb.sum(axis=1)[:, None]
 
-                # M Step Vectorized
+                # M Step
                 weights = clusterProb / clusterProb.sum(axis=0)
                 means = np.sum(self.exp[:, None] * weights, axis=0)
                 vars = np.sum(weights * expDiffSquared, axis=0) / weights.sum(axis=0)
@@ -192,14 +211,12 @@ class SingleGeneGraph:
                 if exp_update:
                     self.exp = self._impute(alpha=alpha, theta=theta)
                 if label_update:
-                    # print(iter)
-                    if iter == 4:
+                    if iter == 4:  # update label every 4 iteration
                         self.label = (
                             GaussianMixture(n_components=self.n_components)
                             .fit(self.exp.reshape(-1, 1))
                             .predict(self.exp.reshape(-1, 1))
                         )
-
         return
 
     def _delta_energy(self, index, newLabel, beta):
@@ -214,10 +231,15 @@ class SingleGeneGraph:
             + ((self.exp[index] - newMean) ** 2 / (2 * newVar))
             - ((self.exp[index] - mean) ** 2 / (2 * var))
         )
-        delta_energy_neighbors = beta * np.sum(
-            self._difference(newLabel, self.label[neighborIndices])
-            - self._difference(self.label[index], self.label[neighborIndices])
-        ) / self.kneighbors
+        delta_energy_neighbors = (
+            beta
+            * 2
+            * np.sum(
+                self._difference(newLabel, self.label[neighborIndices])
+                - self._difference(self.label[index], self.label[neighborIndices])
+            )
+            / self.kneighbors
+        )
 
         return delta_energy_const + delta_energy_neighbors
 
