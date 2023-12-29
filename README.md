@@ -2,7 +2,7 @@
 
 ## Discription 
 
-This project introduce a statistic model using Hidden Markov Raodom Field (HMRF) for analyzing Spatial Transcriptomics Data. 
+This project introduce a statistic model using Hidden Markov Random Field (HMRF) for analyzing Spatial Transcriptomics Data. 
 The model procecss and cluster every single variable (gene/feature) to N component (default 2) considering neighbor information.
 
 ## Usage
