@@ -4,7 +4,6 @@ import random
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 from scipy import sparse as sp
 import multiprocessing as mp
@@ -73,7 +72,7 @@ class SingleGeneGraph:
         if self.verbose:
             print(self.clsPara)
 
-    def impute(self, alpha: float = 0.6, theta: float = 0.2):
+    def impute(self, alpha: float = 0.8, theta: float = 0.2):
         self.imputedExp = self._impute(alpha, theta)
         if self.verbose:
             print("Imputation finished")
@@ -122,9 +121,7 @@ class SingleGeneGraph:
         """
         Calculate the correlation between cells based on the principal components
         """
-        return np.corrcoef(
-            PCA(n_comp).fit_transform(StandardScaler().fit_transform(exp_matrix))
-        )
+        return np.corrcoef(PCA(n_comp).fit_transform(fit_transform(exp_matrix)))
 
     def _label_resort(self):
         # Set the label with the highest mean as 1
