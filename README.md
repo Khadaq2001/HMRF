@@ -10,7 +10,7 @@ The model procecss and cluster every single variable (gene/feature) to N compone
 
 Model mainly takes expression matrix and spatial coordinates array as input. You can get them from your anndata:
 
-```
+```python
 import scanpy as sc
 adata = sc.read_h5ad(h5adPath) 
 exp = adata.to_df()
