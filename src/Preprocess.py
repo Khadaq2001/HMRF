@@ -15,11 +15,13 @@ def read_data(path):
     return adata
 
 
-def data_preprocess(adata, min_genes=200, min_cells=3, high_var=False, n_top=None):
+def data_preprocess(
+    adata, min_genes=200, min_cells=3, high_var=False, n_top=None, scale=False
+):
     """preprocessing adata"""
     sc.pp.filter_cells(adata, min_genes=min_genes)
     sc.pp.filter_genes(adata, min_cells=min_cells)
-    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.normalize_total(adata, target_sum=1e4, inplace=True)
     sc.pp.log1p(adata)
     if high_var:
         if n_top:
@@ -30,7 +32,8 @@ def data_preprocess(adata, min_genes=200, min_cells=3, high_var=False, n_top=Non
             )
         adata.raw = adata
         adata = adata[:, adata.var.highly_variable]
-    sc.pp.scale(adata, max_value=10)
+    if scale:
+        sc.pp.scale(adata, max_value=10)
 
     return adata
 

@@ -73,7 +73,9 @@ class SingleGeneGraph:
         if self.verbose:
             print("Imputation finished")
 
-    def _impute(self, alpha: float = 0.6, theta: float = 0.2):
+    def _impute(
+        self, alpha: float = 0.6, theta: float = 0.2
+    ):  # TODO A proper way to define weight between spot
         """
         Impute the expression by considering neighbor cells
 
@@ -132,7 +134,7 @@ class SingleGeneGraph:
         beta: float,
         icm_iter: int = 2,
         max_iter: int = 8,
-        convengency_threshold: float = 1e-6,
+        convengency_threshold: float = 1e-5,
         exp_update: bool = True,
         label_update: bool = False,
         alpha: float = 0.6,
@@ -154,6 +156,7 @@ class SingleGeneGraph:
                         if temp_delta < 0:
                             self.label[index] = newLabel
                             changed += 1
+                        
                     # print("changed: {} at iteratrion:{}".format(changed, iter))
                     if changed == 0:
                         break
@@ -189,7 +192,7 @@ class SingleGeneGraph:
                 if exp_update:
                     self.exp = self._impute(alpha=alpha, theta=theta)
                 if label_update:
-                    print(iter)
+                    # print(iter)
                     if iter == 4:
                         self.label = (
                             GaussianMixture(n_components=self.n_components)
@@ -214,7 +217,7 @@ class SingleGeneGraph:
         delta_energy_neighbors = beta * np.sum(
             self._difference(newLabel, self.label[neighborIndices])
             - self._difference(self.label[index], self.label[neighborIndices])
-        )
+        ) / self.kneighbors
 
         return delta_energy_const + delta_energy_neighbors
 
@@ -231,10 +234,12 @@ class MultiGeneGraph:
         kneighbors: int = 18,
         n_components: int = 2,
         beta: int = 3,
-        alpha: float = 0.1,
+        alpha: float = 0.6,
         theta: float = 0.2,
         multiprocess: bool = True,
-        update: bool = False,
+        max_iter: int = 10,
+        exp_update: bool = False,
+        label_update: bool = False,
         NPROCESS: int = 3,
     ):
         self.exp = exp
@@ -246,8 +251,10 @@ class MultiGeneGraph:
         self.beta = beta
         self.alpha = alpha
         self.theta = theta
+        self.iter = max_iter
         self.pbar = tqdm(total=len(self.geneList))
-        self.update = update
+        self.exp_update = exp_update
+        self.label_update = label_update
         if multiprocess:
             self.NP = NPROCESS
 
@@ -271,10 +278,12 @@ class MultiGeneGraph:
                     self.n_components,
                     self.alpha,
                     self.theta,
+                    self.iter,
                     imputedExpDict,
                     labelDict,
                     lock,
-                    self.update,
+                    self.exp_update,
+                    self.label_update,
                 ),
                 callback=self._update,
             )
@@ -318,18 +327,21 @@ class MultiGeneGraph:
         n_components,
         alpha,
         theta,
+        max_iter,
         imputedExpDict,
         labelDict,
         lock,
-        update=True,
+        exp_update,
+        label_update,
     ):
         graph = SingleGeneGraph(gene_id=gene, exp=exp, graph=graph, corr=corr)
         graph.mrf_with_icmem(
             beta=beta,
             n_components=n_components,
             icm_iter=2,
-            max_iter=8,
-            exp_update=update,
+            max_iter=max_iter,
+            exp_update=exp_update,
+            label_update=label_update,
             alpha=alpha,
             theta=theta,
             convengency_threshold=1e-6,
